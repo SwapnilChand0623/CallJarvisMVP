@@ -29,7 +29,7 @@ Everything below is deployed from `main` and has been used on a real phone unles
 | "Show me the camera" on a video call the user places | Deployed in PR #17; **not yet tried on a real call** |
 | Logs page at `/logs`: why each call happened and a timeline | Working |
 | iMessage | Not available on the Chert trial (it cannot send first); code exists |
-| New user sign-up | Blocked at phone verification: no SMS provider is configured in Supabase |
+| New user sign-up | Not available on the Chert trial |
 
 **Read [the handoff](#handoff-for-the-next-ai) before changing anything.** The sections after it are the original
 hackathon plan, kept for reference; parts of it are out of date.
