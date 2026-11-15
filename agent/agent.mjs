@@ -91,7 +91,10 @@ const agent = defineAgent({
     // nothing within 10 seconds of that. Participant arrival alone is not readiness, so there is no greeting on it.
     // Without the signal there is no greeting, and the other side speaks first. For outbound calls the backend
     // writes the same room metadata when Chert reports bridge_ready.
-    const stopGreeting = greetOnBridgeReady(ctx.room, () => session.generateReply({ instructions: buildGreeting(loaded, call) }));
+    const stopGreeting = greetOnBridgeReady(ctx.room, () => session.generateReply({ instructions: buildGreeting(loaded, call) }),
+      // Calls accepted through the webhook rely on the server's polling for readiness. If that signal is lost,
+      // greet 6 seconds after the session opens, inside the Mac's 10-second window.
+      { fallbackMs: call.accepted ? 6000 : 0 });
     ctx.addShutdownCallback(async () => stopGreeting());
   },
 });

@@ -8,9 +8,10 @@ import { bridgeReady, greetOnBridgeReady } from '../greet.mjs';
 
 test('call context: inbound from chert, outbound from dispatch metadata', () => {
   assert.deepEqual(parseCallContext('{"chert_call":"call_123","media":{"audio":true}}', 'room-a'),
-    { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, room: 'room-a' });
+    { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, accepted: false, room: 'room-a' });
+  assert.equal(parseCallContext('{"chert_call":"c7161775-cd89","inbound":true}', 'cj-in-x').accepted, true);
   assert.deepEqual(parseCallContext('{"outbound":true,"userId":"someone-else","attemptId":"a-1","reminderId":"r-9","greeting":"bridge_ready"}', 'r'),
-    { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', room: 'r' });
+    { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', accepted: false, room: 'r' });
   for (const metadata of [undefined, '', 'not json', 'null', '[]', '{"outbound":true}', '{"outbound":"true","attemptId":"a-1"}',
     '{"outbound":true,"attemptId":"a b; drop"}', '{"attemptId":"a-1"}']) {
     const call = parseCallContext(metadata, undefined);
@@ -100,4 +101,15 @@ test('greeting fires once, only on bridge_ready', () => {
   for (const listener of [...listeners]) listener();
   assert.equal(greeted, 1);
   assert.equal(bridgeReady('nope'), false);
+});
+
+test('greeting falls back after a delay only when asked to', async () => {
+  const room = () => ({ metadata: '{}', on() {}, off() {} });
+  let greeted = 0;
+  greetOnBridgeReady(room(), () => greeted++, { fallbackMs: 20 });
+  const stop = greetOnBridgeReady(room(), () => greeted++, { fallbackMs: 20 });
+  stop();
+  greetOnBridgeReady(room(), () => greeted++);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(greeted, 1);
 });

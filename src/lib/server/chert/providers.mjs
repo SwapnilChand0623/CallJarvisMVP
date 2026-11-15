@@ -129,6 +129,16 @@ export function createLiveKit(env = process.env, fetchImpl = fetch) {
       error.code = "audio_not_ready";
       throw error;
     },
+    /** Creates a room and dispatches the voice worker into it. The metadata reaches the worker as its job metadata. */
+    async openRoom(room, details) {
+      const metadata = JSON.stringify(details);
+      await twirp(env, fetchImpl, "RoomService", "CreateRoom", { name: room, empty_timeout: 120, metadata });
+      await twirp(env, fetchImpl, "AgentDispatchService", "CreateDispatch", { agent_name: agentName, room, metadata });
+    },
+    /** A bridge token for one room, minted per call. */
+    tokenFor(identity, room) {
+      return bridgeToken({ apiKey: env.LIVEKIT_API_KEY, apiSecret: env.LIVEKIT_API_SECRET, identity, room, ttlSeconds: 3600 });
+    },
     async activateGreeting(room, callId) {
       const metadata = JSON.stringify({
         chert_call: callId,

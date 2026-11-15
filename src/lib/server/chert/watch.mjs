@@ -6,11 +6,12 @@
 import { interpretCall } from "./deliver.mjs";
 import { applyObserved, isGreetingSignal, roomNameFor, TERMINAL } from "./status.mjs";
 
-/** Polling is on when no FaceTime webhook secret is set. CHERT_FACETIME_POLL=1 or 0 overrides that. */
+/**
+ * Polling is on unless CHERT_FACETIME_POLL=0. It is safe beside the webhook: both check the attempt before
+ * acting, and the worker greets once however many times readiness is signalled.
+ */
 export function pollingEnabled(env = process.env) {
-  if (env.CHERT_FACETIME_POLL === "1") return true;
-  if (env.CHERT_FACETIME_POLL === "0") return false;
-  return !env.CHERT_FACETIME_WEBHOOK_SECRET;
+  return env.CHERT_FACETIME_POLL !== "0";
 }
 
 const READY_NAMES = new Set(["bridge_ready", "call.bridge_ready", "call.started"]);

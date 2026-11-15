@@ -93,21 +93,40 @@ OUTREACH_ORIGIN=https://WEB_DOMAIN npm run doctor
 It uses your local `.env.local` for the tokens, so those must match the
 deployed values.
 
-Then test both directions:
+## 5. Accept inbound calls without `chert dev`
 
-1. **You call Jarvis.** Inbound calls still need the Chert connector. On your
-   machine, in `agent/`, run only
-   `npx --yes @trychert/facetime@0.1.0-beta.21 dev --agent calljarvis --env-file .env.local`.
-   Call the line and create a critical reminder due in two minutes.
-2. **Jarvis calls you.** End the call and stop `chert dev` so the line is free.
-   The `scheduler` log shows the attempt, your phone rings, and the `web` log
-   shows `call … is ready; greeting started`.
+Chert asks a webhook whether to accept each incoming call. Pointing that
+webhook at `web` lets the line take calls with nothing running on your machine,
+and leaves it free for Jarvis to call you between calls.
+
+1. Generate a key: `openssl rand -hex 24`.
+2. Add it to the `web` service as `CHERT_WEBHOOK_KEY` and let it redeploy.
+   `/api/health` then shows `inboundCalls: true`.
+3. In the Chert dashboard, open Lines, choose the line, and under Webhook set
+   the integration URL to
+   `https://WEB_DOMAIN/api/webhooks/chert/facetime?key=YOUR_KEY`.
+   Leave webhook signing off.
+4. Stop `chert dev` everywhere. Call the line with FaceTime Audio.
+
+The `web` log shows `[inbound] accepted call …`, then `call … is ready;
+greeting started`, then `call … ended`. A call that cannot be served is
+declined and the log gives the reason.
+
+How it works: `web` creates a LiveKit room for the call, dispatches the
+`calljarvis` worker into it and returns a one-call bridge token to Chert, all
+inside Chert's five-second limit. It then polls the call and cues the greeting
+when FaceTime is ready. If that cue is lost, the worker greets on its own six
+seconds after it starts.
+
+To go back to `chert dev`, run its `setup` command again; it re-points the
+line at the local connector.
 
 ## Limits of this setup
 
-- Inbound calls depend on `chert dev` running on your machine, and it holds
-  the line. Receiving a call and being called cannot both be live until inbound
-  calls are accepted through Chert's webhook.
+- The line handles one call at a time. A reminder that comes due while you are
+  on a call with Jarvis waits and is retried after the call ends.
+- Every inbound caller acts as the account in `VOICE_DEMO_USER_ID`. Chert sends
+  only a hash of the caller's number.
 - Railway restarts a service on each deploy. A call in progress during a
   `web` or `worker` redeploy is dropped.
 - Keep the Supabase Edge Function and Cron job off while `scheduler` runs.

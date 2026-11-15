@@ -36,10 +36,9 @@ function watcher(store, script) {
   return { watch, seen };
 }
 
-test("polling is the default only when no webhook secret is set", () => {
+test("polling stays on unless it is turned off", () => {
   assert.equal(pollingEnabled({}), true);
-  assert.equal(pollingEnabled({ CHERT_FACETIME_WEBHOOK_SECRET: "s" }), false);
-  assert.equal(pollingEnabled({ CHERT_FACETIME_WEBHOOK_SECRET: "s", CHERT_FACETIME_POLL: "1" }), true);
+  assert.equal(pollingEnabled({ CHERT_FACETIME_WEBHOOK_SECRET: "s" }), true);
   assert.equal(pollingEnabled({ CHERT_FACETIME_POLL: "0" }), false);
 });
 

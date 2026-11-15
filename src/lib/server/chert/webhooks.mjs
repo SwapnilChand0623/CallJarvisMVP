@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { verifyFaceTimeSignature, verifyMessagingSignature } from "./providers.mjs";
 import {
   applyCallEvent,
@@ -61,18 +61,36 @@ function messageKind(type, event) {
   return null;
 }
 
-export function createFaceTimeWebhook({ store, livekit, secret }) {
+/** Constant-time comparison of the `key` query parameter with the configured webhook key. */
+function urlKeyMatches(request, key) {
+  if (!key) return false;
+  let given = "";
+  try { given = new URL(request.url).searchParams.get("key") || ""; } catch { return false; }
+  const digest = (value) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(given), digest(key));
+}
+
+/**
+ * FaceTime webhook. A request is trusted when it carries a valid signature (signing enabled in Chert) or the
+ * URL key (an unsigned integration whose webhook URL ends in ?key=<CHERT_WEBHOOK_KEY>). With neither configured,
+ * every request is refused.
+ */
+export function createFaceTimeWebhook({ store, livekit, secret, urlKey, inbound }) {
   return async function facetimeWebhook(request) {
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     const raw = await request.text();
-    if (!verifyFaceTimeSignature(raw, request.headers.get("x-chert-signature") || "", secret)) {
-      return json({ error: "unauthorized" }, 401);
-    }
+    const signed = verifyFaceTimeSignature(raw, request.headers.get("x-chert-signature") || "", secret);
+    if (!signed && !urlKeyMatches(request, urlKey)) return json({ error: "unauthorized" }, 401);
     let event;
     try {
       event = JSON.parse(raw);
     } catch {
       return json({ error: "invalid_json" }, 400);
+    }
+    if ((event?.type || event?.event_type) === "call.incoming") {
+      // The decision is the response body. Declining is the safe answer when inbound calls are not set up.
+      if (!inbound) return json({ action: "decline" });
+      return json((await inbound(event)).decision);
     }
     const id = eventId(request, event, raw);
     if (!await store.claimEvent(id)) return json({ duplicate: true });

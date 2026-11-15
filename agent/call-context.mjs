@@ -12,7 +12,7 @@ const id = value => (typeof value === 'string' && ID.test(value) ? value : null)
 /**
  * @param {string | undefined} jobMetadata the dispatch metadata string
  * @param {string | undefined} roomName
- * @returns {{ direction: 'inbound' | 'outbound', callId: string | null, attemptId: string | null, bridgeIdentity: string | null, room: string | null }}
+ * @returns {{ direction: 'inbound' | 'outbound', callId: string | null, attemptId: string | null, bridgeIdentity: string | null, accepted: boolean, room: string | null }}
  */
 export function parseCallContext(jobMetadata, roomName) {
   let metadata = {};
@@ -26,6 +26,8 @@ export function parseCallContext(jobMetadata, roomName) {
     callId: id(metadata.chert_call),
     attemptId: outbound ? attemptId : null,
     bridgeIdentity: outbound ? `chert-bridge-${attemptId.slice(0, 48)}` : null,
+    // True when the server accepted this call through Chert's webhook. The server then signals readiness itself.
+    accepted: !outbound && metadata.inbound === true,
     room: typeof roomName === 'string' ? roomName : null,
   };
 }

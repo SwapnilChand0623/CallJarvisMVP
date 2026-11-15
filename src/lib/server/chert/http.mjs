@@ -3,6 +3,7 @@ import { resolveCapabilities } from "./capabilities.mjs";
 import { createDeliver } from "./deliver.mjs";
 import { createDomain, createFaceTime, createIMessage, createLiveKit } from "./providers.mjs";
 import { defaultStore } from "./store.mjs";
+import { createInbound } from "./inbound.mjs";
 import { createCallWatcher, pollingEnabled } from "./watch.mjs";
 import { createFaceTimeWebhook, createIMessageWebhook } from "./webhooks.mjs";
 
@@ -54,6 +55,8 @@ export function facetimeWebhookHandler(services) {
     store: services.store,
     livekit: services.livekit,
     secret: services.env.CHERT_FACETIME_WEBHOOK_SECRET,
+    urlKey: services.env.CHERT_WEBHOOK_KEY,
+    inbound: createInbound({ env: services.env, livekit: services.livekit, facetime: services.facetime }),
   });
 }
 
