@@ -2,7 +2,7 @@
 //
 // Inbound (chert dev): job metadata is {"chert_call":"<call id>","media":…}.
 // Outbound: the outreach service (src/lib/server/chert) dispatches this agent with
-//   {"outbound":true,"attemptId":"<notification attempt id>","userId":…,"reminderId":…,"greeting":"bridge_ready"}
+//   {"outbound":true,"attemptId":"<notification attempt id>","userId":…,"reminderId":…,"video":…,"greeting":"bridge_ready"}
 // and joins the bridge as chert-bridge-<attempt id>. Only the attempt id leaves the worker: the server looks the
 // owner and reminder up from that attempt, so the userId and reminderId in the metadata are never used.
 
@@ -12,7 +12,7 @@ const id = value => (typeof value === 'string' && ID.test(value) ? value : null)
 /**
  * @param {string | undefined} jobMetadata the dispatch metadata string
  * @param {string | undefined} roomName
- * @returns {{ direction: 'inbound' | 'outbound', callId: string | null, attemptId: string | null, bridgeIdentity: string | null, video: boolean, accepted: boolean, room: string | null }}
+ * @returns {{ direction: 'inbound' | 'outbound', callId: string | null, attemptId: string | null, bridgeIdentity: string | null, video: boolean, feed: boolean, accepted: boolean, room: string | null }}
  */
 export function parseCallContext(jobMetadata, roomName) {
   let metadata = {};
@@ -27,7 +27,9 @@ export function parseCallContext(jobMetadata, roomName) {
     attemptId: outbound ? attemptId : null,
     bridgeIdentity: outbound ? `chert-bridge-${attemptId.slice(0, 48)}` : null,
     // False only when the call is known to be audio-only. The avatar is published for anything else.
-    video: !outbound && metadata.media?.video !== false,
+    video: outbound ? metadata.video === true : metadata.media?.video !== false,
+    // An outbound video call is an alert call: it shows the live home camera when one is on.
+    feed: outbound && metadata.video === true,
     // True when the server accepted this call through Chert's webhook. The server then signals readiness itself.
     accepted: !outbound && metadata.inbound === true,
     room: typeof roomName === 'string' ? roomName : null,

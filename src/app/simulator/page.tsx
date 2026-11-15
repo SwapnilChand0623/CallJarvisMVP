@@ -11,6 +11,9 @@ type HomeEvent = { id: string; type: string; severity: string; description: stri
 type State = { mode: "home" | "away"; devices: Device[]; events: HomeEvent[]; props: Prop[]; cooldownSeconds: number };
 
 const LOOK_EVERY_MS = 2000;
+/** The picture sent into an alert call: small and slow enough to relay cheaply. */
+const FEED_WIDTH = 320;
+const FEED_FPS = 12;
 /** A prop must be seen in this many looks in a row before it counts. */
 const LOOKS_NEEDED = 2;
 
@@ -29,6 +32,7 @@ export default function Simulator() {
   const [note, setNote] = useState("");
   const [watching, setWatching] = useState(false);
   const [look, setLook] = useState("Camera is off.");
+  const [onCall, setOnCall] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const streaks = useRef<Record<string, number>>({});
   const lastThumb = useRef<Uint8ClampedArray | null>(null);
@@ -143,6 +147,73 @@ export default function Simulator() {
       }
     };
 
+    // On an alert call, this camera is shown live on the FaceTime Video call. The page checks for a live call,
+    // joins its room with a publish-only token and streams a small copy of the picture until the call ends.
+    type CallRoom = { disconnect(): Promise<void> };
+    let callRoom: CallRoom | null = null;
+    let callRoomName = "";
+    let syncing = false;
+    let drawTimer: ReturnType<typeof setInterval> | undefined;
+    let feedTrack: MediaStreamTrack | null = null;
+    const leaveCall = async () => {
+      clearInterval(drawTimer);
+      feedTrack?.stop();
+      feedTrack = null;
+      const room = callRoom;
+      callRoom = null;
+      callRoomName = "";
+      if (alive) setOnCall(false);
+      await room?.disconnect().catch(() => {});
+    };
+    const syncCall = async () => {
+      const element = video.current;
+      if (!alive || syncing || !element || element.videoWidth === 0) return;
+      syncing = true;
+      try {
+        const session = (await call("/api/home/camera", {})) as { live: boolean; url?: string; token?: string; room?: string };
+        if (!alive) return;
+        if (!session.live) { if (callRoom) await leaveCall(); return; }
+        if (callRoomName === session.room) return;
+        await leaveCall();
+        const { Room, RoomEvent, Track } = await import("livekit-client");
+        // A canvas copy keeps the feed small without touching the camera's own resolution, which the prop
+        // recognition still needs.
+        const canvas = document.createElement("canvas");
+        canvas.width = FEED_WIDTH;
+        canvas.height = Math.round((FEED_WIDTH * element.videoHeight) / element.videoWidth / 2) * 2;
+        const pen = canvas.getContext("2d");
+        const draw = () => pen?.drawImage(element, 0, 0, canvas.width, canvas.height);
+        draw();
+        drawTimer = setInterval(draw, 1000 / FEED_FPS);
+        const track = canvas.captureStream(FEED_FPS).getVideoTracks()[0];
+        const room = new Room({ adaptiveStream: false, dynacast: false });
+        try {
+          await room.connect(session.url!, session.token!, { autoSubscribe: false });
+          await room.localParticipant.publishTrack(track, {
+            source: Track.Source.Camera, simulcast: false, videoCodec: "vp8",
+            videoEncoding: { maxBitrate: 200_000, maxFramerate: FEED_FPS },
+          });
+        } catch (error) {
+          clearInterval(drawTimer);
+          track.stop();
+          await room.disconnect().catch(() => {});
+          throw error;
+        }
+        if (!alive) { clearInterval(drawTimer); track.stop(); await room.disconnect().catch(() => {}); return; }
+        feedTrack = track;
+        callRoom = room;
+        callRoomName = session.room!;
+        setOnCall(true);
+        // The room closes when the call ends.
+        room.on(RoomEvent.Disconnected, () => { if (callRoom === room) void leaveCall(); });
+      } catch {
+        // Not reachable right now: the next check tries again.
+      } finally {
+        syncing = false;
+      }
+    };
+    let callTimer: ReturnType<typeof setInterval> | undefined;
+
     void (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }, audio: false });
@@ -150,6 +221,7 @@ export default function Simulator() {
         if (video.current) { video.current.srcObject = stream; await video.current.play().catch(() => {}); }
         setLook("Watching. Nothing on the prop map in view.");
         timer = setInterval(() => void lookOnce(), LOOK_EVERY_MS);
+        callTimer = setInterval(() => void syncCall(), 2000);
       } catch {
         if (alive) { setLook("Camera access was blocked. Allow the camera for this site, or use the buttons below."); setWatching(false); }
       }
@@ -162,6 +234,9 @@ export default function Simulator() {
     return () => {
       alive = false;
       clearInterval(timer);
+      clearInterval(callTimer);
+      void leaveCall();
+      setOnCall(false);
       stream?.getTracks().forEach((track) => track.stop());
       void wake?.release().catch(() => {});
       streaks.current = {};
@@ -233,8 +308,10 @@ export default function Simulator() {
           </Button>
         </div>
         <video ref={video} className={watching ? "sim-video" : "sim-video off"} muted playsInline aria-label="Camera preview" />
+        {watching && onCall && <p className="sim-live" role="status"><span aria-hidden />Live on the call: Jarvis is showing this camera on FaceTime.</p>}
         <p className="sim-hint" role="status">{look}</p>
         <p className="sim-small">Frames are sent to Gemini to check for the props below, and are not stored. A prop counts after two looks in a row.</p>
+        <p className="sim-small">When Jarvis calls about a critical alert, it is a FaceTime Video call that shows this camera live while it is on. Run the camera on a different device from the phone that takes the call: a phone pauses its camera when FaceTime rings.</p>
       </section>
 
       <section className="sim-card">

@@ -115,6 +115,11 @@ export function memoryStore(data: MemoryData = demoData()): Store & { data: Memo
       row.acknowledgedAt = new Date().toISOString();
       return publicEvent(row);
     },
+    async findLiveAlertCall(userId) {
+      const live = data.callAttempts.filter((row) => row.userId === userId && ["accepted", "answered"].includes(row.status)
+        && row.about?.kind === "home_event" && row.about.priority === "critical").at(-1);
+      return live?.id ?? null;
+    },
     async insertCallEvent(userId, event) { data.callEvents.push({ userId, at: new Date().toISOString(), ...event }); },
     async listCallEvents(userId, limit) {
       return data.callEvents.filter((row) => row.userId === userId).slice(-limit).reverse()

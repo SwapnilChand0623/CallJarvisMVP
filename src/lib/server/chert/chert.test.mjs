@@ -562,3 +562,51 @@ test("a temporarily unavailable line retries the same attempt and sends once aft
   assert.equal(calls.create, 1);
   assert.equal((await store.getAttempt("att-1")).status, "accepted");
 });
+
+test("a critical home alert is placed as a video call; everything else stays audio", async () => {
+  const { cameraToken, wantsVideo } = await import("./providers.mjs");
+  const env = { CHERT_FACETIME_API_KEY: "k", CHERT_PROJECT_ID: "p", CHERT_LINE_ID: "line", LIVEKIT_URL: "wss://lk.example" };
+  const sent = [];
+  const fetchImpl = async (url, options) => {
+    sent.push({ key: options.headers["Idempotency-Key"], body: JSON.parse(options.body) });
+    return new Response(JSON.stringify({ data: { id: "call-9" } }), { status: 201 });
+  };
+  const facetime = createFaceTime(env, fetchImpl, { bridgeToken: () => "token", agentName: "calljarvis" });
+  const alert = attempt({ sourceKind: "home_event", video: true, idempotencyKey: "key-1" });
+  await facetime.create(alert, { agentIdentity: "agent-1" });
+  await facetime.create(attempt({ idempotencyKey: "key-2" }), { agentIdentity: "agent-1" });
+  await facetime.create(alert, { agentIdentity: "agent-1", video: false });
+  assert.deepEqual(sent.map((request) => [request.key, request.body.media]), [
+    ["key-1", { audio: true, video: true }],
+    ["key-2", { audio: true, video: false }],
+    ["key-1:audio", { audio: true, video: false }],
+  ]);
+  assert.equal(wantsVideo(alert, { ALERT_VIDEO: "0" }), false, "the switch turns video off");
+  assert.equal(wantsVideo(attempt(), {}), false);
+
+  // The camera's token can publish its camera into one room and nothing else.
+  const token = cameraToken({ apiKey: "key", apiSecret: "secret", identity: "home-camera-abc", room: "cj-att1" });
+  const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+  assert.deepEqual(claims.video, { room: "cj-att1", roomJoin: true, canPublish: true, canSubscribe: false, canPublishData: false, canPublishSources: ["camera"] });
+  assert.equal(claims.sub, "home-camera-abc");
+  assert.ok(claims.exp - claims.nbf <= 900);
+});
+
+test("when the line refuses a video call, the alert goes out as an audio call", async () => {
+  const store = storeWith({ sourceKind: "home_event", sourceId: "evt-1", video: true });
+  const asked = [];
+  const { deliver } = harness(store, {
+    live: true,
+    facetime: {
+      async create(current, options = {}) {
+        asked.push(options.video);
+        return options.video === false ? { kind: "accepted", providerId: "call-audio" } : { kind: "failed", providerId: null, errorCode: "video_not_supported" };
+      },
+      async read() { return { provenAbsent: false, call: null }; },
+    },
+  });
+  const result = await deliver("att-1");
+  assert.deepEqual(asked, [undefined, false]);
+  assert.equal(result.body.providerId, "call-audio");
+  assert.equal((await store.getAttempt("att-1")).status, "accepted");
+});

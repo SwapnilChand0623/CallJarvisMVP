@@ -6,15 +6,19 @@ import { buildTools, toolReply } from '../tools.mjs';
 import { createVoiceApi } from '../voice-api.mjs';
 import { bridgeReady, greetOnBridgeReady } from '../greet.mjs';
 import { guardRepliesAfterTools } from '../reply-guard.mjs';
-import { isCritical } from '../avatar.mjs';
+import { HEIGHT, WIDTH, isCritical, renderFrame } from '../avatar.mjs';
+import { FEED_HEIGHT, FEED_WIDTH, fitFrame, shrinkAvatar } from '../feed.mjs';
 
 test('call context: inbound from chert, outbound from dispatch metadata', () => {
   assert.deepEqual(parseCallContext('{"chert_call":"call_123","media":{"audio":true}}', 'room-a'),
-    { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, video: true, accepted: false, room: 'room-a' });
+    { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, video: true, feed: false, accepted: false, room: 'room-a' });
   assert.equal(parseCallContext('{"chert_call":"c","media":{"audio":true,"video":false}}', 'r').video, false);
   assert.equal(parseCallContext('{"chert_call":"c7161775-cd89","inbound":true}', 'cj-in-x').accepted, true);
   assert.deepEqual(parseCallContext('{"outbound":true,"userId":"someone-else","attemptId":"a-1","reminderId":"r-9","greeting":"bridge_ready"}', 'r'),
-    { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', video: false, accepted: false, room: 'r' });
+    { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', video: false, feed: false, accepted: false, room: 'r' });
+  const alert = parseCallContext('{"outbound":true,"attemptId":"a-2","video":true}', 'r');
+  assert.deepEqual([alert.video, alert.feed], [true, true], 'an outbound video call carries the camera feed');
+  assert.equal(parseCallContext('{"chert_call":"c","video":true}', 'r').feed, false, 'never on a call the user placed');
   for (const metadata of [undefined, '', 'not json', 'null', '[]', '{"outbound":true}', '{"outbound":"true","attemptId":"a-1"}',
     '{"outbound":true,"attemptId":"a b; drop"}', '{"attemptId":"a-1"}']) {
     const call = parseCallContext(metadata, undefined);
@@ -162,4 +166,53 @@ test('reply guard: prompts once when the model stays silent after a tool, and no
   emit('close', {});
   await new Promise(resolve => setTimeout(resolve, 60));
   assert.equal(prompts.length, 1, 'nothing after the call ends');
+});
+
+test('camera feed: pictures are fitted into a small frame, centred and upright', () => {
+  const pixel = (frame, x, y) => [...frame.subarray((y * FEED_WIDTH + x) * 4, (y * FEED_WIDTH + x) * 4 + 4)];
+  const picture = (width, height, colour) => {
+    const data = new Uint8Array(width * height * 4);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) data.set([...colour(x, y), 255], (y * width + x) * 4);
+    return data;
+  };
+  assert.deepEqual([FEED_WIDTH, FEED_HEIGHT], [320, 180]);
+
+  // A 16:9 picture fills the frame: left half red, right half blue.
+  const wide = fitFrame(picture(640, 360, x => (x < 320 ? [255, 0, 0] : [0, 0, 255])), 640, 360);
+  assert.equal(wide.length, 320 * 180 * 4);
+  assert.deepEqual(pixel(wide, 10, 90), [255, 0, 0, 255]);
+  assert.deepEqual(pixel(wide, 310, 90), [0, 0, 255, 255]);
+
+  // A 4:3 picture keeps its shape, with black bars at the sides.
+  const boxed = fitFrame(picture(640, 480, () => [0, 255, 0]), 640, 480);
+  assert.deepEqual(pixel(boxed, 5, 90), [0, 0, 0, 255]);
+  assert.deepEqual(pixel(boxed, 160, 90), [0, 255, 0, 255]);
+
+  // A phone held upright sends a sideways picture marked with a quarter turn. Turned upright it is tall, so it
+  // sits in the middle with bars either side; the picture's left edge (red) becomes the top.
+  const sideways = picture(640, 360, x => (x < 320 ? [255, 0, 0] : [0, 0, 255]));
+  const turned = fitFrame(sideways, 640, 360, 1);
+  assert.deepEqual(pixel(turned, 160, 20), [255, 0, 0, 255]);
+  assert.deepEqual(pixel(turned, 160, 160), [0, 0, 255, 255]);
+  assert.deepEqual(pixel(turned, 20, 90), [0, 0, 0, 255]);
+  assert.deepEqual(pixel(fitFrame(sideways, 640, 360, 3), 160, 20), [0, 0, 255, 255], 'the opposite turn flips it');
+  assert.deepEqual(pixel(fitFrame(sideways, 640, 360, 2), 10, 90), [0, 0, 255, 255], 'a half turn swaps the sides');
+
+  // A buffer is reused between frames without leaving the last picture behind.
+  const reused = fitFrame(picture(640, 480, () => [9, 9, 9]), 640, 480, 0, wide);
+  assert.equal(reused, wide);
+  assert.deepEqual(pixel(reused, 5, 90), [0, 0, 0, 255]);
+
+  const avatar = shrinkAvatar(renderFrame(0, 0, 1));
+  assert.equal(avatar.length, 320 * 180 * 4);
+  const full = renderFrame(0, 0, 1);
+  assert.deepEqual(pixel(avatar, 100, 50), [...full.subarray((100 * WIDTH + 200) * 4, (100 * WIDTH + 200) * 4 + 3), 255]);
+  assert.ok(HEIGHT === 360);
+});
+
+test('prompt: on a video alert call Jarvis knows the camera is shown and that it cannot see it', () => {
+  const context = { now: { spoken: 'noon', local: '2026-11-15T12:00' }, user: { timeZone: 'America/Chicago' }, openReminders: [], tools: [] };
+  assert.match(buildInstructions(context, { feed: true }), /live home camera.*cannot see the video/);
+  assert.doesNotMatch(buildInstructions(context, { feed: false }), /live home camera/);
+  assert.doesNotMatch(buildInstructions(context), /live home camera/);
 });

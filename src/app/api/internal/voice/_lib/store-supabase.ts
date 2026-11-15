@@ -145,6 +145,14 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
         summary: typeof row.metadata?.summary === "string" ? row.metadata.summary : "", direction: row.metadata?.direction === "outbound" ? "outbound" : "inbound",
       }));
     },
+    async findLiveAlertCall(userId) {
+      const since = new Date(Date.now() - 15 * 60_000).toISOString();
+      const rows = await rest("GET", "notification_attempts",
+        `user_id=${eq(userId)}&channel=eq.facetime&home_event_id=not.is.null&status=in.(accepted,answered)&created_at=gte.${encodeURIComponent(since)}&order=created_at.desc&limit=1&select=id,home_event_id`);
+      if (!rows[0]) return null;
+      const events = await rest("GET", "home_events", `user_id=${eq(userId)}&id=${eq(rows[0].home_event_id)}&select=severity`);
+      return events[0]?.severity === "critical" ? rows[0].id : null;
+    },
     async listCallAttempts(userId, limit) {
       const rows = await rest("GET", "notification_attempts",
         `user_id=${eq(userId)}&channel=eq.facetime&order=created_at.desc&limit=${limit}&select=id,stage,status,error_code,simulated,created_at,outcome_at,reminder_id,home_event_id,check_in_id`);
