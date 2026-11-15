@@ -16,7 +16,9 @@ export type Reminder = {
 };
 
 export type Profile = { id: string; displayName: string | null; timeZone: string | null };
-export type Device = { id: string; userId: string; name: string; on: boolean; simulated: boolean };
+export type DeviceKind = "light" | "stove";
+export type Device = { id: string; userId: string; name: string; kind: DeviceKind; entityId: string; on: boolean; simulated: boolean };
+export type HomeMode = "home" | "away";
 export type HomeEvent = {
   id: string;
   type: string;
@@ -24,9 +26,13 @@ export type HomeEvent = {
   description: string;
   occurredAt: string;
   source: string; // "simulated" or the real integration's name
+  /** True when the event was raised while the home was Away, which is what makes it worth a call. */
+  outreachEligible: boolean;
+  acknowledgedAt: string | null;
 };
+export type NewHomeEvent = Pick<HomeEvent, "type" | "severity" | "description" | "outreachEligible">;
 export type Memory = { id: string; content: string; createdAt: string };
-export type Attempt = { id: string; userId: string; reminderId: string | null };
+export type Attempt = { id: string; userId: string; reminderId: string | null; homeEventId: string | null };
 
 export type ReminderPatch = Partial<Pick<Reminder, "title" | "dueAt" | "priority" | "status" | "acknowledgedAt" | "snoozedUntil">>;
 
@@ -39,8 +45,16 @@ export type Store = {
   insertReminder(userId: string, input: Pick<Reminder, "title" | "dueAt" | "priority">): Promise<Reminder>;
   /** Returns null when the reminder does not exist for this owner. */
   updateReminder(userId: string, id: string, patch: ReminderPatch): Promise<Reminder | null>;
-  /** Only lights the owner has permitted. */
+  /** Only devices the owner has permitted. */
   listDevices(userId: string): Promise<Device[]>;
+  /** Creates the simulated demo home (a stove and a porch light) if the owner has no devices. */
+  ensureDemoHome(userId: string): Promise<void>;
+  getHomeMode(userId: string): Promise<HomeMode>;
+  setHomeMode(userId: string, mode: HomeMode): Promise<HomeMode>;
+  getHomeEvent(userId: string, id: string): Promise<HomeEvent | null>;
+  insertHomeEvent(userId: string, event: NewHomeEvent): Promise<HomeEvent>;
+  /** Marks one event acknowledged. Returns null when it does not exist for this owner. */
+  acknowledgeHomeEvent(userId: string, id: string): Promise<HomeEvent | null>;
   setDeviceState(userId: string, deviceId: string, on: boolean): Promise<Device | null>;
   recordDeviceAction(userId: string, action: { deviceId: string; on: boolean; status: "succeeded" | "failed" | "simulated" }): Promise<void>;
   listHomeEvents(userId: string, limit: number): Promise<HomeEvent[]>;
@@ -50,9 +64,9 @@ export type Store = {
   insertCheckIn(userId: string, input: { dueAt: string }): Promise<{ id: string }>;
 };
 
-/** The device boundary owned by Shishir's Codex (src/lib/server/home). The action reports only what this returns. */
+/** The device boundary. The action reports only what this returns. */
 export type HomeService = {
-  setLight(input: { userId: string; deviceId: string; on: boolean; origin: string }): Promise<
+  setDevice(input: { userId: string; deviceId: string; on: boolean; origin: string }): Promise<
     { ok: true; on: boolean; simulated: boolean } | { ok: false; reason: string }
   >;
 };
@@ -64,6 +78,8 @@ export type Actor = {
   displayName: string | null;
   /** Reminder the call or message is about, from the notification attempt. */
   focusReminderId: string | null;
+  /** Home event the call is about, from the notification attempt. */
+  focusEventId?: string | null;
   /** "voice" or "imessage". */
   origin: string;
 };

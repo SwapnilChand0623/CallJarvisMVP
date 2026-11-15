@@ -1,13 +1,13 @@
 // Stand-in for the device service owned by Shishir's Codex (src/lib/server/home). It flips the stored state of a
-// permitted simulated light and writes the device_action_logs row. Replace the binding in route.ts with the real service when it lands;
+// permitted simulated device and writes the device_action_logs row. Replace the binding in route.ts with the real service when it lands;
 // controlLight only reports what setLight returns.
 import type { HomeService, Store } from "./types";
 
 export function simulatedHomeService(store: Store): HomeService {
   return {
-    async setLight({ userId, deviceId, on }) {
+    async setDevice({ userId, deviceId, on }) {
       const known = (await store.listDevices(userId)).find((item) => item.id === deviceId);
-      if (!known) return { ok: false, reason: "the light was not found or is not permitted" };
+      if (!known) return { ok: false, reason: "the device was not found or is not permitted" };
       // This stand-in cannot command hardware, so it refuses a real device instead of faking its state.
       if (!known.simulated) return { ok: false, reason: "real devices need the home service, which is not connected yet" };
       let device;

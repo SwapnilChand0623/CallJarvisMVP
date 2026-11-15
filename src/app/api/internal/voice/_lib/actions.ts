@@ -1,8 +1,9 @@
 // Authorized domain actions for voice and iMessage. Each runs for an Actor that trusted server code resolved;
 // nothing here accepts a user id from the caller's arguments. A result is ok only after the write succeeded.
+import { propByEventType } from "../../../../../lib/home/props";
 import { ACTION_NAMES } from "./contract";
 import { resolveDue, toLocal, toSpoken } from "./time";
-import type { ActionError, ActionResult, Actor, Deps, Priority, Reminder, ReminderPatch, ReminderStatus } from "./types";
+import type { ActionError, ActionResult, Actor, Deps, HomeEvent, Priority, Reminder, ReminderPatch, ReminderStatus } from "./types";
 
 type Args = Record<string, unknown>;
 type Outcome = Record<string, unknown> | Failure;
@@ -34,6 +35,14 @@ function view(reminder: Reminder, actor: Actor, now: Date) {
     status: reminder.status,
     acknowledged: reminder.acknowledgedAt !== null,
     overdue: OPEN.includes(reminder.status) && due.getTime() < now.getTime(),
+  };
+}
+
+function eventView(event: HomeEvent, actor: Actor) {
+  return {
+    id: event.id, type: event.type, severity: event.severity, description: event.description,
+    when: toSpoken(new Date(event.occurredAt), actor.timeZone), simulated: event.source === "simulated",
+    acknowledged: event.acknowledgedAt !== null,
   };
 }
 
@@ -146,29 +155,45 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
   },
 
   async getHomeStatus(deps, actor) {
-    const [devices, events] = await Promise.all([deps.store.listDevices(actor.userId), deps.store.listHomeEvents(actor.userId, 5)]);
+    const [devices, events, mode] = await Promise.all([
+      deps.store.listDevices(actor.userId), deps.store.listHomeEvents(actor.userId, 5), deps.store.getHomeMode(actor.userId),
+    ]);
     return {
-      lights: devices.map((device) => ({ id: device.id, name: device.name, on: device.on })),
-      recentEvents: events.map((event) => ({
-        type: event.type, severity: event.severity, description: event.description,
-        when: toSpoken(new Date(event.occurredAt), actor.timeZone), simulated: event.source === "simulated",
-      })),
+      mode,
+      devices: devices.map((device) => ({ id: device.id, name: device.name, kind: device.kind, on: device.on, simulated: device.simulated })),
+      recentEvents: events.map((event) => eventView(event, actor)),
     };
   },
 
-  async controlLight(deps, actor, args) {
-    if (typeof args.on !== "boolean") return new Failure("invalid_arguments", "Ask whether the light should be on or off.");
+  async controlDevice(deps, actor, args) {
+    if (typeof args.on !== "boolean") return new Failure("invalid_arguments", "Ask whether it should be on or off.");
     const wanted = text(args.device, 100).toLowerCase();
-    if (!wanted) return new Failure("invalid_arguments", "Ask which light the user means.");
+    if (!wanted) return new Failure("invalid_arguments", "Ask which device the user means.");
     const devices = await deps.store.listDevices(actor.userId);
     const byId = devices.filter((device) => device.id.toLowerCase() === wanted);
-    const matches = byId.length ? byId : devices.filter((device) => device.name.toLowerCase().includes(wanted) || wanted.includes(device.name.toLowerCase()));
-    if (matches.length === 0) return new Failure("device_not_found", "No authorized light matches. Call getHomeStatus to see the user's lights.");
-    if (matches.length > 1) return new Failure("device_ambiguous", `More than one light matches: ${matches.map((device) => device.name).join(", ")}. Ask which one.`);
+    const matches = byId.length ? byId : devices.filter((device) =>
+      device.name.toLowerCase().includes(wanted) || wanted.includes(device.name.toLowerCase()) || wanted.includes(device.kind));
+    if (matches.length === 0) return new Failure("device_not_found", "No authorized device matches. Call getHomeStatus to see the user's devices.");
+    if (matches.length > 1) return new Failure("device_ambiguous", `More than one device matches: ${matches.map((device) => device.name).join(", ")}. Ask which one.`);
     const device = matches[0];
-    const outcome = await deps.home.setLight({ userId: actor.userId, deviceId: device.id, on: args.on, origin: actor.origin });
-    if (!outcome.ok) return new Failure("device_action_failed", `The light did not change: ${outcome.reason}. Tell the user it failed.`);
-    return { light: { id: device.id, name: device.name, on: outcome.on }, simulated: outcome.simulated };
+    const outcome = await deps.home.setDevice({ userId: actor.userId, deviceId: device.id, on: args.on, origin: actor.origin });
+    if (!outcome.ok) return new Failure("device_action_failed", `The ${device.kind} did not change: ${outcome.reason}. Tell the user it failed.`);
+    return { device: { id: device.id, name: device.name, kind: device.kind, on: outcome.on }, simulated: outcome.simulated };
+  },
+
+  async setHomeMode(deps, actor, args) {
+    if (args.mode !== "home" && args.mode !== "away") return new Failure("invalid_arguments", "mode must be home or away.");
+    return { mode: await deps.store.setHomeMode(actor.userId, args.mode) };
+  },
+
+  async acknowledgeHomeEvent(deps, actor) {
+    // The event this call is about, or otherwise the newest one still waiting.
+    let event = actor.focusEventId ? await deps.store.getHomeEvent(actor.userId, actor.focusEventId) : null;
+    if (!event) event = (await deps.store.listHomeEvents(actor.userId, 10)).find((item) => !item.acknowledgedAt) ?? null;
+    if (!event) return new Failure("event_not_found", "There is no home event waiting to be acknowledged.");
+    if (event.acknowledgedAt) return { event: eventView(event, actor), alreadyAcknowledged: true };
+    const saved = await deps.store.acknowledgeHomeEvent(actor.userId, event.id);
+    return saved ? { event: eventView(saved, actor) } : new Failure("event_not_found", "That event no longer exists, so nothing changed.");
   },
 
   async saveMemory(deps, actor, args) {
@@ -213,10 +238,15 @@ export async function buildContext(deps: Deps, actor: Actor) {
   ]);
   open.sort((a, b) => effectiveDue(a).getTime() - effectiveDue(b).getTime());
   const focus = actor.focusReminderId ? await deps.store.getReminder(actor.userId, actor.focusReminderId) : null;
+  const focusEvent = actor.focusEventId ? await deps.store.getHomeEvent(actor.userId, actor.focusEventId) : null;
+  const [mode, devices] = await Promise.all([deps.store.getHomeMode(actor.userId), deps.store.listDevices(actor.userId)]);
   return {
     user: { name: actor.displayName, timeZone: actor.timeZone },
     now: { local: toLocal(now, actor.timeZone), spoken: toSpoken(now, actor.timeZone) },
     focusReminder: focus ? view(focus, actor, now) : null,
+    // What Jarvis may offer on a call about this event, from the simulator's prop map.
+    focusEvent: focusEvent ? { ...eventView(focusEvent, actor), suggestion: propByEventType(focusEvent.type)?.offer ?? null } : null,
+    home: { mode, devices: devices.map((device) => ({ name: device.name, kind: device.kind, on: device.on })) },
     openReminders: open.slice(0, 10).map((item) => view(item, actor, now)),
     openReminderCount: open.length,
     savedNotes: memories.map((memory) => memory.content),

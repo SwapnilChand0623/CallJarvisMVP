@@ -3,7 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { House, BellRing, UserRound, ArrowUpRight } from "lucide-react";
+import { House, BellRing, UserRound, ArrowUpRight, Radar } from "lucide-react";
 import { useAccount } from "./account-provider";
 export function Brand() {
   return (
@@ -75,6 +75,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {[
             { href: "/", label: "Home", icon: House },
             { href: "/reminders", label: "Reminders", icon: BellRing },
+            { href: "/simulator", label: "Simulator", icon: Radar },
             { href: "/account", label: "Account", icon: UserRound },
           ].map(({ href, label, icon: Icon }) => (
             <Link

@@ -35,8 +35,8 @@ const run = (session, name, args) => session.tools[name].execute(args, {});
 console.log('vague  ->', (await run(first, 'createReminder', { title: 'Call Mom' })).status);
 const created = await run(first, 'createReminder', { title: 'Call Mom', dueInMinutes: 30, priority: 'high' });
 console.log('create ->', created.status, created.reminder.title, '|', created.reminder.due);
-const light = await run(first, 'controlLight', { device: 'living room lamp', on: true });
-console.log('light  ->', light.status, light.light, 'simulated:', light.simulated);
+const light = await run(first, 'controlDevice', { device: 'living room lamp', on: true });
+console.log('light  ->', light.status, light.device, 'simulated:', light.simulated);
 
 // Call 2 (fresh inbound): the reminder is in context; snooze then complete it.
 const second = await open('{"chert_call":"call-2"}');

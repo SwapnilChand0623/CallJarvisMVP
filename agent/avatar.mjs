@@ -94,9 +94,10 @@ export function createAvatarState() {
   };
 }
 
-/** True when this call should show the critical look: it is about a critical reminder, or one is overdue. */
+/** True when this call should show the critical look: it is about a critical reminder or home event, or a critical reminder is overdue. */
 export function isCritical(context) {
   if (!context) return false;
   if (context.focusReminder?.priority === 'critical') return true;
+  if (context.focusEvent?.severity === 'critical') return true;
   return (context.openReminders ?? []).some(item => item.priority === 'critical' && item.overdue);
 }

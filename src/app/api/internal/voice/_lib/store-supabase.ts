@@ -3,7 +3,7 @@
 //
 // Tables and columns follow docs/data-contract.md and the migration on codex/database. Revision bumps, reminder
 // history and cancellation of stale pending attempts are done by database triggers, never from here.
-import type { Attempt, Device, HomeEvent, Memory, Profile, Reminder, ReminderPatch, Store } from "./types";
+import type { Attempt, Device, HomeEvent, HomeMode, Memory, Profile, Reminder, ReminderPatch, Store } from "./types";
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- untyped until database.ts lands
 
@@ -38,8 +38,16 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
     priority: row.priority, status: row.status, acknowledgedAt: row.acknowledged_at ?? null,
     snoozedUntil: row.snoozed_until ? new Date(row.snoozed_until).toISOString() : null,
   });
-  const device = (row: Row): Device => ({ id: row.id, userId: row.user_id, name: row.name, on: row.is_on === true, simulated: row.source !== "real" });
-  const permittedLights = "kind=eq.light&permitted=is.true";
+  const device = (row: Row): Device => ({
+    id: row.id, userId: row.user_id, name: row.name, kind: row.kind === "stove" ? "stove" : "light", entityId: row.entity_id,
+    on: row.is_on === true, simulated: row.source !== "real",
+  });
+  const permitted = "permitted=is.true";
+  const homeEvent = (row: Row): HomeEvent => ({
+    id: row.id, type: row.type, severity: row.severity, description: row.description,
+    occurredAt: new Date(row.occurred_at).toISOString(), source: row.source,
+    outreachEligible: row.outreach_eligible === true, acknowledgedAt: row.acknowledged_at ?? null,
+  });
   const reminderColumns = (patch: ReminderPatch): Row => ({
     ...(patch.title !== undefined && { title: patch.title }),
     ...(patch.dueAt !== undefined && { due_at: patch.dueAt }),
@@ -56,8 +64,8 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
       return row ? ({ id: row.user_id, displayName: null, timeZone: row.timezone ?? null } satisfies Profile) : null;
     },
     async getAttempt(attemptId) {
-      const [row] = await rest("GET", "notification_attempts", `id=${eq(attemptId)}&select=id,user_id,reminder_id&limit=1`);
-      return row ? ({ id: row.id, userId: row.user_id, reminderId: row.reminder_id ?? null } satisfies Attempt) : null;
+      const [row] = await rest("GET", "notification_attempts", `id=${eq(attemptId)}&select=id,user_id,reminder_id,home_event_id&limit=1`);
+      return row ? ({ id: row.id, userId: row.user_id, reminderId: row.reminder_id ?? null, homeEventId: row.home_event_id ?? null } satisfies Attempt) : null;
     },
     async listReminders(userId, statuses, limit) {
       const rows = await rest("GET", "reminders",
@@ -79,10 +87,53 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
       return row ? reminder(row) : null;
     },
     async listDevices(userId) {
-      return (await rest("GET", "devices", `user_id=${eq(userId)}&${permittedLights}&order=name.asc&limit=50`)).map(device);
+      return (await rest("GET", "devices", `user_id=${eq(userId)}&${permitted}&order=name.asc&limit=50`)).map(device);
+    },
+    async ensureDemoHome(userId) {
+      const existing = await rest("GET", "devices", `user_id=${eq(userId)}&select=id&limit=1`);
+      if (existing.length) return;
+      const [integration] = await rest("POST", "home_assistant_integrations", "select=id", { user_id: userId, name: "Demo home", source: "simulated" });
+      if (!integration) throw new Error("insert returned no row");
+      const base = { user_id: userId, integration_id: integration.id, permitted: true, is_on: false, source: "simulated" };
+      await rest("POST", "devices", "select=id", [
+        { ...base, name: "Kitchen stove", entity_id: "stove.kitchen", kind: "stove" },
+        { ...base, name: "Porch light", entity_id: "light.porch", kind: "light" },
+      ]);
+    },
+    async getHomeMode(userId) {
+      const [row] = await rest("GET", "home_modes", `user_id=${eq(userId)}&select=mode&limit=1`);
+      return (row?.mode === "away" ? "away" : "home") satisfies HomeMode;
+    },
+    async setHomeMode(userId, mode) {
+      // Upsert on the primary key.
+      const response = await fetcher(`${base}/home_modes?on_conflict=user_id&select=mode`, {
+        method: "POST",
+        headers: { apikey: serviceRoleKey, authorization: `Bearer ${serviceRoleKey}`, "content-type": "application/json", prefer: "return=representation,resolution=merge-duplicates" },
+        body: JSON.stringify({ user_id: userId, mode, updated_at: new Date().toISOString() }),
+        signal: AbortSignal.timeout(8000),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`POST home_modes failed with HTTP ${response.status}`);
+      return mode;
+    },
+    async getHomeEvent(userId, id) {
+      const [row] = await rest("GET", "home_events", `user_id=${eq(userId)}&id=${eq(id)}&limit=1`);
+      return row ? homeEvent(row) : null;
+    },
+    async insertHomeEvent(userId, event) {
+      const [row] = await rest("POST", "home_events", "select=*", {
+        user_id: userId, type: event.type, severity: event.severity, description: event.description,
+        source: "simulated", outreach_eligible: event.outreachEligible,
+      });
+      if (!row) throw new Error("insert returned no row");
+      return homeEvent(row);
+    },
+    async acknowledgeHomeEvent(userId, id) {
+      const [row] = await rest("PATCH", "home_events", `user_id=${eq(userId)}&id=${eq(id)}&select=*`, { acknowledged_at: new Date().toISOString() });
+      return row ? homeEvent(row) : null;
     },
     async setDeviceState(userId, deviceId, on) {
-      const [row] = await rest("PATCH", "devices", `user_id=${eq(userId)}&id=${eq(deviceId)}&${permittedLights}&select=*`, { is_on: on });
+      const [row] = await rest("PATCH", "devices", `user_id=${eq(userId)}&id=${eq(deviceId)}&${permitted}&select=*`, { is_on: on });
       return row ? device(row) : null;
     },
     async recordDeviceAction(userId, action) {
@@ -91,10 +142,7 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
     },
     async listHomeEvents(userId, limit) {
       const rows = await rest("GET", "home_events", `user_id=${eq(userId)}&order=occurred_at.desc&limit=${limit}`);
-      return rows.map((row): HomeEvent => ({
-        id: row.id, type: row.type, severity: row.severity, description: row.description,
-        occurredAt: new Date(row.occurred_at).toISOString(), source: row.source,
-      }));
+      return rows.map(homeEvent);
     },
     async listMemories(userId, limit) {
       // Voice notes are structured_memory rows keyed "note:<uuid>" with value {"text": …}. Expired rows are never read.
