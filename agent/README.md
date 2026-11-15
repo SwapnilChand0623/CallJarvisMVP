@@ -39,10 +39,12 @@ application built on LiveKit Agents and Gemini 3.8 Live. Node 22.23.2 or later, 
 `chert doctor --agent NAME` also sends the agent a real test job.
 
 For Jarvis's avatar, set `JARVIS_VIDEO=1`, restart the agent, then call the
-line using **FaceTime Video**. The caller sees a glowing core with a voice line
-through it. It breathes while idle and pulses while Jarvis speaks. It is teal
-normally and red when a critical reminder is overdue. The look is drawn in
-`avatar.mjs`. Caller-camera input stays disabled, and outbound reminder calls
+line using **FaceTime Video**. The caller sees the Sir Jarvis Trojan horse in
+ocean ink on parchment, with antique brass compass details. The horse breathes gently while idle and subtly
+swells, ripples, and brightens while Jarvis speaks. It turns red when the call
+context contains a critical reminder, a critical home event, or an overdue
+critical reminder. The look is drawn in `avatar.mjs` without additional graphics
+dependencies. Caller-camera input stays disabled, and outbound reminder calls
 are audio only, so they show no avatar.
 
 When testing callbacks on the same line, end the inbound call and stop

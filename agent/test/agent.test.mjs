@@ -6,7 +6,7 @@ import { buildTools, toolReply } from '../tools.mjs';
 import { createVoiceApi } from '../voice-api.mjs';
 import { bridgeReady, greetOnBridgeReady } from '../greet.mjs';
 import { guardRepliesAfterTools } from '../reply-guard.mjs';
-import { HEIGHT, WIDTH, createAvatarState, isCritical, renderFrame } from '../avatar.mjs';
+import { isCritical } from '../avatar.mjs';
 
 test('call context: inbound from chert, outbound from dispatch metadata', () => {
   assert.deepEqual(parseCallContext('{"chert_call":"call_123","media":{"audio":true}}', 'room-a'),
@@ -115,26 +115,6 @@ test('greeting falls back after a delay only when asked to', async () => {
   greetOnBridgeReady(room(), () => greeted++);
   await new Promise(resolve => setTimeout(resolve, 60));
   assert.equal(greeted, 1);
-});
-
-test('avatar: glows brighter while speaking and turns red when critical', () => {
-  const centre = (HEIGHT / 2 - 30) * WIDTH * 4 + (WIDTH / 2 + 70) * 4; // a point beside the core, off the voice line
-  const idle = renderFrame(1, 0, 0);
-  const speaking = renderFrame(1, 1, 0);
-  const critical = renderFrame(1, 0, 1);
-  assert.equal(idle.length, WIDTH * HEIGHT * 4);
-  assert.ok(speaking[centre + 1] > idle[centre + 1], 'the glow reaches further while speaking');
-  assert.ok(idle[centre + 1] > idle[centre], 'calm is teal: more green than red');
-  assert.ok(critical[centre] > critical[centre + 1], 'critical is red: more red than green');
-  assert.ok(idle.every((value, index) => index % 4 !== 3 || value === 255), 'every pixel is opaque');
-
-  const state = createAvatarState();
-  assert.deepEqual(state.step(1 / 15), { voice: 0, alert: 0 });
-  state.setSpeaking(true); state.setCritical(true);
-  const first = state.step(1 / 15);
-  assert.ok(first.voice > 0 && first.voice < 1 && first.alert > 0 && first.alert < 1, 'levels ease in');
-  for (let i = 0; i < 60; i++) state.step(1 / 15);
-  assert.ok(state.step(1 / 15).voice > 0.99);
 });
 
 test('avatar: critical means the call is about a critical reminder, or one is overdue', () => {

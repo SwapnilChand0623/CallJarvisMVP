@@ -45,7 +45,7 @@ const agent = defineAgent({
     }
     const identity = call.direction === 'outbound' ? call.bridgeIdentity : (await ctx.waitForParticipant()).identity;
     const loaded = await context;
-    // Red when the call is about a critical reminder, or one is overdue; teal otherwise.
+    // Red when the call is about a critical reminder, or one is overdue; ocean ink otherwise.
     avatar?.setCritical(isCritical(loaded));
     const instructions = buildInstructions(loaded);
     const tools = loaded ? buildTools(loaded.tools, (action, args) => voiceApi(call, action, args)) : {};
