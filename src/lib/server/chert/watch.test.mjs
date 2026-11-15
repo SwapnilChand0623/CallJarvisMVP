@@ -119,3 +119,14 @@ test("the call is created against the agent's real participant identity and then
   assert.equal(bodies[0].remote_participant_identity, "agent-AJ_k3");
   assert.deepEqual(watched, ["call-9"]);
 });
+
+test("a declined or rung-out call counts as unanswered; a call that could not be placed is a failure", async () => {
+  const { interpretCall } = await import("./deliver.mjs");
+  const attemptRow = { status: "accepted" };
+  assert.equal(interpretCall({ id: "c", status: "failed", terminal_reason: "recipient_declined" }, attemptRow).kind, "unanswered");
+  assert.equal(interpretCall({ id: "c", status: "failed", terminal_reason: "no_answer" }, attemptRow).kind, "unanswered");
+  assert.equal(interpretCall({ id: "c", status: "ended" }, attemptRow).kind, "unanswered");
+  assert.equal(interpretCall({ id: "c", status: "failed", terminal_reason: "line_offline" }, attemptRow).kind, "failed");
+  assert.equal(interpretCall({ id: "c", status: "failed" }, attemptRow).kind, "failed");
+  assert.equal(interpretCall({ id: "c", status: "ended" }, { status: "answered" }).kind, "completed");
+});

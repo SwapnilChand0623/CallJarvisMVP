@@ -25,7 +25,9 @@ const filter = `user_id=eq.${encodeURIComponent(userId)}`;
 await rest(`profiles?${filter}`, { method: "PATCH", prefer: "return=minimal",
   body: { timezone: zone, destination: values.phone, verified_at: new Date().toISOString(), outreach_enabled: true, opted_in_channels: ["facetime"] } });
 // Critical reminders call straight away. Other priorities start with an iMessage, which this account has not opted in to.
-await rest(`communication_rules?${filter}`, { method: "PATCH", prefer: "return=minimal", body: { critical_channel: "facetime", grace_seconds: 0 } });
+await rest(`communication_rules?${filter}`, { method: "PATCH", prefer: "return=minimal", body: { critical_channel: "facetime", grace_seconds: 0,
+  // One more call two minutes after a missed or declined one.
+  critical_fallback_channel: "facetime", critical_fallback_seconds: 120 } });
 
 console.log(`Account ${userId} is set up: time zone ${zone}, FaceTime outreach on, critical reminders call ${values.phone.slice(0, 4)}…${values.phone.slice(-2)}.`);
 console.log(`\nAdd this line to .env.local, then restart the server:\nVOICE_DEMO_USER_ID=${userId}`);

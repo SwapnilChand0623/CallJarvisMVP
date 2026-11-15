@@ -114,7 +114,8 @@ The Supabase store follows `docs/data-contract.md` on `codex/database`.
 - A device action writes one `device_action_logs` row after its outcome.
 - Saved notes are `structured_memory` rows keyed `note:<uuid>` with value
   `{"text": …}` and `approved_at` set. Expired rows are not read.
-- A check-in is inserted enabled with `consented_at` set.
+- A check-in is inserted enabled, with `consented_at` set and `priority`
+  critical so the scheduler calls. The column's default, low, sends nothing.
 - `profiles` has no name column, so Jarvis does not address the user by name.
 
 ## Open dependencies

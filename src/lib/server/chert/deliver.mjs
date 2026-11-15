@@ -29,7 +29,14 @@ export function interpretCall(call, attempt) {
   const status = String(call?.status || "").toLowerCase();
   const reason = call?.terminal_reason || call?.reason || null;
   const ready = call?.bridge_ready === true || status === "bridge_ready" || status === "answered";
-  if (["failed", "error"].includes(status)) return { kind: "failed", providerId: call.id, errorCode: reason || "call_failed" };
+  // A call that rang out or was declined is unanswered, whichever status the provider files it under, so that
+  // the missed-call fallback applies. Only a call that could not be placed is a failure.
+  const notAnswered = /declin|reject|no[_ -]?answer|unanswered|missed|busy|ring|timeout|timed[_ -]?out|cancel/i.test(String(reason ?? ""));
+  if (["failed", "error"].includes(status)) {
+    return notAnswered && !ready
+      ? { kind: "unanswered", providerId: call.id, errorCode: reason }
+      : { kind: "failed", providerId: call.id, errorCode: reason || "call_failed" };
+  }
   if (["declined", "missed", "no_answer", "unanswered", "busy"].includes(status)) {
     return { kind: "unanswered", providerId: call.id, errorCode: reason || status };
   }

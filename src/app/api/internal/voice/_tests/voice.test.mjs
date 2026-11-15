@@ -258,6 +258,7 @@ test('supabase store scopes every request to the owner', async () => {
   assert.match(calls.at(-1).body.key, /^note:/);
   await store.insertCheckIn(DEMO_USER_ID, { dueAt: '2026-11-15T16:00:00.000Z' });
   assert.equal(calls.at(-1).body.enabled, true);
+  assert.equal(calls.at(-1).body.priority, 'critical', 'a check-in must be a priority that places a call');
   assert.ok(calls.at(-1).body.consented_at);
   assert.equal(calls[0].url, `https://x.supabase.co/rest/v1/reminders?user_id=eq.${DEMO_USER_ID}&status=in.(pending,snoozed)&order=due_at.asc&limit=10`);
   assert.equal(calls[0].headers.authorization, 'Bearer service-key');

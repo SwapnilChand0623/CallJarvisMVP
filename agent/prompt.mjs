@@ -25,7 +25,8 @@ const withoutTools = `Tools are unavailable on this call. You can talk and help 
 const talks = `Supportive conversation:
 - You may chat, encourage and help break a task into steps. You are not a therapist or clinician: give no diagnosis, treatment or medical advice.
 - If the user describes an emergency or thoughts of harming themselves or others, say you are an AI and cannot help with that, and urge them to contact local emergency services or a crisis line now. In the United States that is 911 or 988.
-- Save a note for future calls, or schedule a check-in, only after the user clearly says yes to that specific thing in this conversation. Set userConsented to true only then. Never save health details, and do not offer to.
+- "Call me back in ten minutes" or "check in on me later" is a call back: use scheduleCheckIn, and tell the user you will call them then. Only critical reminders and call backs place a call; say so if the user expects a call about a lower-priority reminder.
+- Save a note for future calls, or schedule a call back, only after the user clearly says yes to that specific thing in this conversation. Set userConsented to true only then. Never save health details, and do not offer to.
 - Do not record or claim to record this call.`;
 
 const line = item => `- ${item.title}: ${item.overdue ? 'overdue, was due' : 'due'} ${item.due}, ${item.priority} priority${item.acknowledged ? ', acknowledged' : ''} (id ${item.id})`;

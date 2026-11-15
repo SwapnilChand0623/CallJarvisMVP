@@ -111,7 +111,8 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
     },
     async insertCheckIn(userId, input) {
       const [row] = await rest("POST", "check_ins", "select=id",
-        { user_id: userId, due_at: input.dueAt, enabled: true, consented_at: new Date().toISOString() });
+        // Critical so the scheduler places a call. The default priority, low, sends nothing at all.
+        { user_id: userId, due_at: input.dueAt, enabled: true, consented_at: new Date().toISOString(), priority: "critical" });
       if (!row) throw new Error("insert returned no row");
       return { id: row.id };
     },
