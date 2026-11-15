@@ -9,7 +9,7 @@ const { buildTools } = await import(`${root}/agent/tools.mjs`);
 const { parseCallContext } = await import(`${root}/agent/call-context.mjs`);
 const { buildGreeting } = await import(`${root}/agent/prompt.mjs`);
 const { toFunctionDeclarations } = await import(`${root}/agent/node_modules/@livekit/agents-plugin-google/dist/utils.js`);
-const { llm, voice } = await import(`${root}/agent/node_modules/@livekit/agents/dist/index.js`);
+const { voice } = await import(`${root}/agent/node_modules/@livekit/agents/dist/index.js`);
 
 const config = voiceConfig({ VOICE_STORE: 'memory', VOICE_TOOL_TOKEN: 'e2e-token' });
 const handler = createVoiceHandler(config);
