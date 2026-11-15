@@ -17,15 +17,15 @@ const STALE_MS = 1500;
  * Fits an RGBA picture into the feed frame: scaled down to fit, centred on black, turned upright.
  * rotation is in quarter turns clockwise (0 to 3), as the camera reports it.
  */
-export function fitFrame(source, width, height, rotation = 0, out = new Uint8Array(FEED_WIDTH * FEED_HEIGHT * 4)) {
+export function fitFrame(source, width, height, rotation = 0, out = new Uint8Array(FEED_WIDTH * FEED_HEIGHT * 4), outWidth = FEED_WIDTH, outHeight = FEED_HEIGHT) {
   const turns = ((rotation % 4) + 4) % 4;
   const uprightW = turns % 2 ? height : width;
   const uprightH = turns % 2 ? width : height;
-  const scale = Math.min(FEED_WIDTH / uprightW, FEED_HEIGHT / uprightH);
+  const scale = Math.min(outWidth / uprightW, outHeight / uprightH);
   const drawW = Math.max(1, Math.round(uprightW * scale));
   const drawH = Math.max(1, Math.round(uprightH * scale));
-  const left = (FEED_WIDTH - drawW) >> 1;
-  const top = (FEED_HEIGHT - drawH) >> 1;
+  const left = (outWidth - drawW) >> 1;
+  const top = (outHeight - drawH) >> 1;
   for (let i = 0; i < out.length; i += 4) { out[i] = 0; out[i + 1] = 0; out[i + 2] = 0; out[i + 3] = 255; }
   for (let y = 0; y < drawH; y++) {
     const v = Math.min(uprightH - 1, Math.floor((y + 0.5) / scale));
@@ -35,7 +35,7 @@ export function fitFrame(source, width, height, rotation = 0, out = new Uint8Arr
       const sx = turns === 0 ? u : turns === 1 ? v : turns === 2 ? width - 1 - u : width - 1 - v;
       const sy = turns === 0 ? v : turns === 1 ? height - 1 - u : turns === 2 ? height - 1 - v : u;
       const from = (sy * width + sx) * 4;
-      const to = ((top + y) * FEED_WIDTH + left + x) * 4;
+      const to = ((top + y) * outWidth + left + x) * 4;
       out[to] = source[from]; out[to + 1] = source[from + 1]; out[to + 2] = source[from + 2];
     }
   }
@@ -60,31 +60,37 @@ const isCamera = participant => typeof participant?.identity === 'string' && par
 /**
  * Publishes the worker's video track and relays the home camera onto it when one joins.
  * Returns the avatar's controls (setSpeaking, setCritical), used while no camera is live.
+ * An alert call uses the small frame throughout. A call the user placed keeps the avatar at full size (full: true)
+ * and scales the camera's small picture up to it.
  */
-export async function publishFeed(ctx) {
-  const source = new VideoSource(FEED_WIDTH, FEED_HEIGHT);
+export async function publishFeed(ctx, { full: fullSize = false } = {}) {
+  const FRAME_WIDTH = fullSize ? WIDTH : FEED_WIDTH;
+  const FRAME_HEIGHT = fullSize ? HEIGHT : FEED_HEIGHT;
+  const AVATAR_RATE = fullSize ? 15 : AVATAR_FPS;
+  const source = new VideoSource(FRAME_WIDTH, FRAME_HEIGHT);
   const track = LocalVideoTrack.createVideoTrack('jarvis-camera', source);
   const state = createAvatarState();
   const full = new Uint8Array(WIDTH * HEIGHT * 4);
-  const small = new Uint8Array(FEED_WIDTH * FEED_HEIGHT * 4);
+  const small = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4);
   const started = Date.now();
   let lastCameraFrame = 0;
   let closed = false;
   let live = false;
 
-  const push = pixels => { if (!closed) source.captureFrame(new VideoFrame(pixels, FEED_WIDTH, FEED_HEIGHT, VideoBufferType.RGBA)); };
+  const push = pixels => { if (!closed) source.captureFrame(new VideoFrame(pixels, FRAME_WIDTH, FRAME_HEIGHT, VideoBufferType.RGBA)); };
   const avatarFrame = () => {
-    const { voice, alert } = state.step(1 / AVATAR_FPS);
+    const { voice, alert } = state.step(1 / AVATAR_RATE);
     if (Date.now() - lastCameraFrame < STALE_MS) return;
     if (live) { live = false; console.log('[jarvis] camera feed paused: showing the avatar'); }
-    push(shrinkAvatar(renderFrame((Date.now() - started) / 1000, voice, alert, full), small));
+    const frame = renderFrame((Date.now() - started) / 1000, voice, alert, full);
+    push(fullSize ? frame : shrinkAvatar(frame, small));
   };
 
   async function relay(remoteTrack, identity) {
     console.log(`[jarvis] camera feed joined: ${identity}`);
     const stream = new VideoStream(remoteTrack);
     const reader = stream.getReader();
-    const picture = new Uint8Array(FEED_WIDTH * FEED_HEIGHT * 4);
+    const picture = new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4);
     try {
       while (!closed) {
         const { value, done } = await reader.read();
@@ -92,9 +98,9 @@ export async function publishFeed(ctx) {
         const now = Date.now();
         if (now - lastCameraFrame < 1000 / FEED_FPS) continue; // more frames than the call needs
         const rgba = value.frame.convert(VideoBufferType.RGBA);
-        push(fitFrame(rgba.data, rgba.width, rgba.height, value.rotation, picture));
+        push(fitFrame(rgba.data, rgba.width, rgba.height, value.rotation, picture, FRAME_WIDTH, FRAME_HEIGHT));
         lastCameraFrame = now;
-        if (!live) { live = true; console.log(`[jarvis] camera feed live: ${rgba.width}x${rgba.height} shown at ${FEED_WIDTH}x${FEED_HEIGHT}`); }
+        if (!live) { live = true; console.log(`[jarvis] camera feed live: ${rgba.width}x${rgba.height} shown at ${FRAME_WIDTH}x${FRAME_HEIGHT}`); }
       }
     } catch (error) {
       if (!closed) console.warn('[jarvis] camera feed stopped:', error instanceof Error ? error.message : String(error));
@@ -118,8 +124,8 @@ export async function publishFeed(ctx) {
 
   avatarFrame();
   const publication = await ctx.room.localParticipant.publishTrack(track, { source: TrackSource.SOURCE_CAMERA });
-  console.log(`[jarvis] alert video published at ${FEED_WIDTH}x${FEED_HEIGHT}: ${publication.sid}`);
-  const timer = setInterval(avatarFrame, 1000 / AVATAR_FPS);
+  console.log(`[jarvis] video published at ${FRAME_WIDTH}x${FRAME_HEIGHT}: ${publication.sid}`);
+  const timer = setInterval(avatarFrame, 1000 / AVATAR_RATE);
   ctx.addShutdownCallback(async () => {
     closed = true;
     clearInterval(timer);

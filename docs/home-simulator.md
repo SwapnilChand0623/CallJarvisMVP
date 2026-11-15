@@ -64,3 +64,14 @@ shows Jarvis's avatar.
 - If the line refuses a video call, the alert is placed again as an audio call.
 - `ALERT_VIDEO=0` on `web` turns this off, and alert calls go back to audio.
 - The video passes through LiveKit and FaceTime live. Nothing is recorded or stored.
+
+### Asking to see the camera
+
+On a FaceTime Video call the user places, "show me the camera" makes Jarvis call `showCamera`. The request is
+recorded against that call, the simulator page finds it on its next check (every 2 seconds) and streams into the
+call's room, and the worker's video switches from the avatar to the camera. "Hide the camera" or the end of the
+call stops it. A request lapses after 15 minutes if a call's end was never recorded. The Simulator's camera must
+already be started: a browser cannot be switched on remotely.
+
+Chert does not pass the caller's number to the worker, so any caller is treated as the demo user and can ask for
+the camera while the Simulator's camera is on. Stop the camera on the Simulator page to prevent that.

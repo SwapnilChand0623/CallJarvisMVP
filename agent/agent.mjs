@@ -3,7 +3,6 @@ import { AutoSubscribe, defineAgent, voice } from '@livekit/agents';
 import { realtime } from '@livekit/agents-plugin-google';
 import { TrackPublishOptions, TrackSource } from '@livekit/rtc-node';
 import { isCritical } from './avatar.mjs';
-import { publishAvatar } from './camera.mjs';
 import { publishFeed } from './feed.mjs';
 import { parseCallContext } from './call-context.mjs';
 import { runAgent } from './chert-rooms.mjs';
@@ -35,11 +34,12 @@ const agent = defineAgent({
     // caller before opening a paid model session. Doctor jobs may end without a caller ever joining.
     // Outbound: Chert needs our audio track published before it dials, so the session opens first and stays silent
     // until bridge_ready.
-    // On FaceTime Video calls the caller sees Jarvis's avatar. It is published before waiting for the caller.
+    // On FaceTime Video calls the caller sees Jarvis's avatar, and the live home camera once they ask for it.
+    // The track is published before waiting for the caller.
     let avatar = null;
     if (call.direction === 'inbound' && call.video && process.env.JARVIS_VIDEO === '1') {
       try {
-        avatar = await publishAvatar(ctx);
+        avatar = await publishFeed(ctx, { full: true });
       } catch (error) {
         console.warn('[jarvis] avatar unavailable:', error instanceof Error ? error.message : String(error));
       }
@@ -57,7 +57,9 @@ const agent = defineAgent({
     const loaded = await context;
     // Red when the call is about a critical reminder, or one is overdue; ocean ink otherwise.
     avatar?.setCritical(isCritical(loaded));
-    const instructions = buildInstructions(loaded, call);
+    // The camera can only be shown where there is a video track to show it on.
+    if (loaded && (!avatar || call.feed)) loaded.tools = loaded.tools.filter(tool => tool.name !== 'showCamera');
+    const instructions = buildInstructions(loaded, { ...call, canShowCamera: Boolean(avatar) && !call.feed });
     const tools = loaded ? buildTools(loaded.tools, (action, args) => voiceApi(call, action, args)) : {};
 
     const session = new voice.AgentSession({

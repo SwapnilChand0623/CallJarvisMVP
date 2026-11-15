@@ -41,6 +41,7 @@ export function buildInstructions(context, call = {}) {
     `Current local time: ${context.now.spoken} (${context.now.local}, ${context.user?.timeZone}).`,
     context.focusReminder ? `You placed this call about this reminder:\n${line(context.focusReminder)}\nacknowledgeReminder, completeReminder and snoozeReminder with no reminder argument apply to it.` : null,
     call.feed ? 'This is a FaceTime Video call. The user is shown the live home camera when it is on; you cannot see the video yourself, so never describe what is in it.' : null,
+    call.canShowCamera ? 'This is a FaceTime Video call and the user sees your avatar. If they ask to see the home camera, call showCamera with show true; call it with show false when they are done. You cannot see the video yourself, so never describe what is in it: answer questions about the home from getHomeStatus.' : null,
     context.focusEvent ? `You placed this call about this home event: ${context.focusEvent.description} (${context.focusEvent.when}, ${context.focusEvent.simulated ? 'from the home simulator' : 'from a home sensor'}).${context.focusEvent.suggestion ? ` ${context.focusEvent.suggestion}` : ''} Act only after the user says yes. Once the user has heard it, call acknowledgeHomeEvent with no arguments.` : null,
     context.home ? `The home is set to ${context.home.mode === 'away' ? 'Away' : 'Home'}. Devices: ${context.home.devices.length ? context.home.devices.map(device => `${device.name} (${device.on ? 'on' : 'off'})`).join(', ') : 'none'}.` : null,
     context.openReminders?.length

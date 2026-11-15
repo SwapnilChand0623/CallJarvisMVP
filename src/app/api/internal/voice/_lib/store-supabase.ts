@@ -5,6 +5,9 @@
 // history and cancellation of stale pending attempts are done by database triggers, never from here.
 import type { Attempt, CallAttempt, CallEvent, Device, HomeEvent, HomeMode, Memory, Profile, Reminder, ReminderPatch, Store } from "./types";
 
+/** A request to see the camera lapses after this long, in case a call's end was never recorded. */
+export const CAMERA_REQUEST_MS = 15 * 60_000;
+
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- untyped until database.ts lands
 
 const eq = (value: string) => `eq.${encodeURIComponent(value)}`;
@@ -135,7 +138,7 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
     async insertCallEvent(userId, event) {
       await rest("POST", "communication_metadata", "select=id", {
         user_id: userId, attempt_id: event.attemptId, channel: "facetime", provider_id: event.callId, event: event.event,
-        metadata: { summary: event.summary, direction: event.direction },
+        metadata: { summary: event.summary, direction: event.direction, ...(event.room ? { room: event.room } : {}) },
       });
     },
     async listCallEvents(userId, limit) {
@@ -144,6 +147,13 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
         at: new Date(row.occurred_at).toISOString(), attemptId: row.attempt_id ?? null, callId: row.provider_id ?? null, event: row.event,
         summary: typeof row.metadata?.summary === "string" ? row.metadata.summary : "", direction: row.metadata?.direction === "outbound" ? "outbound" : "inbound",
       }));
+    },
+    async findCameraRoom(userId) {
+      const since = new Date(Date.now() - CAMERA_REQUEST_MS).toISOString();
+      const rows = await rest("GET", "communication_metadata",
+        `user_id=${eq(userId)}&channel=eq.facetime&event=in.(camera_on,camera_off,call_ended)&occurred_at=gte.${encodeURIComponent(since)}&order=occurred_at.desc&limit=1&select=event,metadata`);
+      const room = rows[0]?.event === "camera_on" ? rows[0].metadata?.room : null;
+      return typeof room === "string" ? room : null;
     },
     async findLiveAlertCall(userId) {
       const since = new Date(Date.now() - 15 * 60_000).toISOString();

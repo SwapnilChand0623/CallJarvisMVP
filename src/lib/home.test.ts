@@ -221,7 +221,7 @@ test("camera: only the owner of a live critical alert call gets a publish-only t
   assert.ok(session.live);
   assert.deepEqual([session.url, session.room], ["wss://lk.example", "cj-aaaaaaaa000040008000000000000001"]);
   const claims = JSON.parse(Buffer.from(session.token.split(".")[1], "base64url").toString());
-  assert.deepEqual([claims.video.room, claims.video.canSubscribe, claims.sub], [session.room, false, "home-camera-aaaaaaaa"]);
+  assert.deepEqual([claims.video.room, claims.video.canSubscribe, claims.sub], [session.room, false, "home-camera-50000000"]);
 
   assert.deepEqual(await cameraSession(store, OTHER_USER_ID, env), { live: false }, "another user's call is not offered");
   assert.deepEqual(await cameraSession(store, FRESH_USER, { ...env, ALERT_VIDEO: "0" }), { live: false });
@@ -230,4 +230,23 @@ test("camera: only the owner of a live critical alert call gets a publish-only t
   store.data.callAttempts.length = 0;
   store.data.callAttempts.push(call({ status: "completed" }), call({ about: { kind: "reminder", text: "Meds", at: null, priority: "critical" } }));
   assert.deepEqual(await cameraSession(store, FRESH_USER, env), { live: false }, "ended calls and reminder calls have no camera");
+});
+
+test("camera: a call on which the user asked to see the camera gets a token for that call's room", async () => {
+  const { cameraSession } = await import("./server/home/camera");
+  const { store } = setup();
+  const env = { LIVEKIT_URL: "wss://lk.example", LIVEKIT_API_KEY: "key", LIVEKIT_API_SECRET: "secret" };
+  const ask = (event: string, room: string | null) => store.insertCallEvent(FRESH_USER, { attemptId: null, callId: "call-1", direction: "inbound", event, summary: "", room });
+  await ask("camera_on", "room-abc");
+  const session = await cameraSession(store, FRESH_USER, env);
+  assert.ok(session.live);
+  assert.equal(session.room, "room-abc");
+  const claims = JSON.parse(Buffer.from(session.token.split(".")[1], "base64url").toString());
+  assert.deepEqual([claims.video.room, claims.video.canSubscribe, claims.video.canPublishSources], ["room-abc", false, ["camera"]]);
+  assert.deepEqual(await cameraSession(store, OTHER_USER_ID, env), { live: false });
+
+  await ask("camera_off", "room-abc");
+  assert.deepEqual(await cameraSession(store, FRESH_USER, env), { live: false });
+  await ask("camera_on", "not a room name!");
+  assert.deepEqual(await cameraSession(store, FRESH_USER, env), { live: false }, "a malformed room is never signed");
 });

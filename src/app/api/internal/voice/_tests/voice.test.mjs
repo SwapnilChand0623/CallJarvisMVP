@@ -326,3 +326,26 @@ test('call log: a call writes why it started, what was done and that it ended', 
   broken.store.insertCallEvent = async () => { throw new Error('down'); };
   assert.equal((await broken.post({ action: 'session.start', call })).status, 200);
 });
+
+test('showCamera: a request on a call points the camera at that call until it is withdrawn or the call ends', async () => {
+  const { post, store } = endpoint();
+  const call = { callId: 'call-20', room: 'room-20' };
+  assert.equal(await store.findCameraRoom(DEMO_USER_ID), null);
+  assert.equal((await post({ action: 'showCamera', args: { show: true } })).body.error.code, 'not_on_a_call');
+  assert.equal((await post({ action: 'showCamera', args: {}, call })).body.error.code, 'invalid_arguments');
+
+  const shown = await post({ action: 'showCamera', args: { show: true }, call });
+  assert.equal(shown.body.result.showing, true);
+  assert.equal(await store.findCameraRoom(DEMO_USER_ID), 'room-20');
+  assert.equal(await store.findCameraRoom(OTHER_USER_ID), null, 'only for the user on the call');
+  assert.deepEqual(store.data.callEvents.filter((row) => row.callId === 'call-20').map((row) => [row.event, row.summary]),
+    [['camera_on', 'Asked to see the live home camera on the call.']], 'one line in the call log');
+
+  await post({ action: 'showCamera', args: { show: false }, call });
+  assert.equal(await store.findCameraRoom(DEMO_USER_ID), null);
+
+  await post({ action: 'showCamera', args: { show: true }, call });
+  await post({ action: 'session.end', call });
+  assert.equal(await store.findCameraRoom(DEMO_USER_ID), null, 'the end of the call stops the camera');
+  assert.ok(ACTIONS.some((action) => action.name === 'showCamera'));
+});

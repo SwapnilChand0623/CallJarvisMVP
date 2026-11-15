@@ -32,7 +32,8 @@ export type HomeEvent = {
 };
 /** One line of a call's timeline. No audio or transcript is ever stored: only what happened and when. */
 export type CallEvent = { at: string; attemptId: string | null; callId: string | null; event: string; summary: string; direction: "inbound" | "outbound" };
-export type NewCallEvent = Omit<CallEvent, "at">;
+/** room is kept only for camera requests, so the camera can find the call. */
+export type NewCallEvent = Omit<CallEvent, "at"> & { room?: string | null };
 /** A FaceTime outreach attempt with what it was about, for the Logs page. */
 export type CallAttempt = {
   id: string; stage: string; status: string; errorCode: string | null; simulated: boolean; createdAt: string; outcomeAt: string | null;
@@ -68,6 +69,8 @@ export type Store = {
   listCallAttempts(userId: string, limit: number): Promise<CallAttempt[]>;
   /** The id of the user's FaceTime call about a critical home alert that is ringing or in progress, if any. */
   findLiveAlertCall(userId: string): Promise<string | null>;
+  /** The room of the call on which the user last asked to see the camera, unless that was withdrawn or a call has ended since. */
+  findCameraRoom(userId: string): Promise<string | null>;
   /** Marks one event acknowledged. Returns null when it does not exist for this owner. */
   acknowledgeHomeEvent(userId: string, id: string): Promise<HomeEvent | null>;
   setDeviceState(userId: string, deviceId: string, on: boolean): Promise<Device | null>;
@@ -97,6 +100,8 @@ export type Actor = {
   focusEventId?: string | null;
   /** "voice" or "imessage". */
   origin: string;
+  /** The call this request came from, when it came from one. */
+  call?: { room: string | null; callId: string | null; attemptId: string | null; direction: "inbound" | "outbound" };
 };
 
 export type ActionError = { code: string; message: string; candidates?: { id: string; title: string; due: string }[] };
