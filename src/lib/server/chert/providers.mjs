@@ -120,8 +120,9 @@ export function createLiveKit(env = process.env, fetchImpl = fetch) {
       while (Date.now() < deadline) {
         const listed = await twirp(env, fetchImpl, "RoomService", "ListParticipants", { room });
         const people = listed.participants ?? [];
-        const ready = people.some((person) => person.identity !== `chert-bridge-${attempt.id}` && participantHasAudio(person));
-        if (ready) return { roomName: room };
+        const agent = people.find((person) => !String(person.identity).startsWith("chert-bridge-") && participantHasAudio(person));
+        // Chert subscribes to this exact participant. A dispatched worker joins under a job identity, not its agent name.
+        if (agent) return { roomName: room, agentIdentity: agent.identity };
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
       const error = new Error("audio_not_ready");
@@ -178,7 +179,7 @@ export function createFaceTime(env = process.env, fetchImpl = fetch, tokens) {
       if (!call) return { provenAbsent: true, call: null };
       return { provenAbsent: false, call: { providerId: call.id, status: "accepted" } };
     },
-    async create(attempt) {
+    async create(attempt, { agentIdentity } = {}) {
       const room = roomNameFor(attempt);
       const token = tokens.bridgeToken(attempt, room);
       const destinationType = String(attempt.destination).includes("@") ? "email" : "phone";
@@ -194,7 +195,7 @@ export function createFaceTime(env = process.env, fetchImpl = fetch, tokens) {
           media: { audio: true, video: false },
           livekit_url: env.LIVEKIT_URL,
           participant_token: token,
-          remote_participant_identity: tokens.agentName,
+          remote_participant_identity: agentIdentity || tokens.agentName,
         }),
       });
       const providerId = body?.data?.id ?? null;
@@ -204,6 +205,13 @@ export function createFaceTime(env = process.env, fetchImpl = fetch, tokens) {
       if (response.status === 409) return { kind: "unknown", providerId, errorCode: "idempotency_conflict" };
       if (providerId && response.ok) return { kind: "unknown", providerId };
       return { kind: "failed", providerId, errorCode: body?.error?.code || `facetime_http_${response.status}` };
+    },
+    /** Recorded lifecycle events for a call, oldest first when the API orders them. Empty on any error. */
+    async events(providerId) {
+      const { response, body } = await request(`/v1/calls/${encodeURIComponent(providerId)}/events`);
+      if (!response.ok) return [];
+      const items = body?.data?.items ?? body?.data?.events ?? body?.data ?? body?.events ?? [];
+      return Array.isArray(items) ? items : [];
     },
     async read(providerId) {
       const { response, body } = await request(`/v1/calls/${encodeURIComponent(providerId)}`);

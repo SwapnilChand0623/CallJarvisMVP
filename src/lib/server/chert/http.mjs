@@ -3,6 +3,7 @@ import { resolveCapabilities } from "./capabilities.mjs";
 import { createDeliver } from "./deliver.mjs";
 import { createDomain, createFaceTime, createIMessage, createLiveKit } from "./providers.mjs";
 import { defaultStore } from "./store.mjs";
+import { createCallWatcher, pollingEnabled } from "./watch.mjs";
 import { createFaceTimeWebhook, createIMessageWebhook } from "./webhooks.mjs";
 
 export function createServices(env = process.env, fetchImpl = fetch, store = defaultStore(env)) {
@@ -19,7 +20,8 @@ export function createServices(env = process.env, fetchImpl = fetch, store = def
 }
 
 export function createOutreachHandler({ env, store, livekit, facetime, imessage, capabilities }) {
-  const deliver = createDeliver({ store, livekit, facetime, imessage, capabilities });
+  const watch = pollingEnabled(env) ? createCallWatcher({ store, livekit, facetime }) : undefined;
+  const deliver = createDeliver({ store, livekit, facetime, imessage, capabilities, watch });
   return async function outreach(request) {
     if (!authorized(request.headers.get("authorization"), env.OUTREACH_TOKEN)) return json({ error: "unauthorized" }, 401);
     if (request.method === "GET") {

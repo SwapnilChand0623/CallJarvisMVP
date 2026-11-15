@@ -79,7 +79,7 @@ async function remember(store, attempt, kind, errorCode, providerId) {
  * A live provider is contacted only after the attempt is claimed and its idempotency key is stored.
  * An uncertain FaceTime create is retried with that same key. An uncertain iMessage send is not repeated.
  */
-export function createDeliver({ store, livekit, facetime, imessage, capabilities }) {
+export function createDeliver({ store, livekit, facetime, imessage, capabilities, watch }) {
   return async function deliver(attemptId, now = Date.now()) {
     const attempt = await store.getAttempt(attemptId);
     if (!attempt) return { http: 404, body: { error: "attempt_not_found" } };
@@ -159,10 +159,13 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
   async function placeCall(attempt) {
     let placed = false;
     try {
-      await livekit.prepare(attempt);
+      const prepared = await livekit.prepare(attempt);
       placed = true;
-      const result = await facetime.create(attempt);
-      return remember(store, attempt, result.kind, result.errorCode ?? null, result.providerId);
+      const result = await facetime.create(attempt, { agentIdentity: prepared?.agentIdentity });
+      const saved = await remember(store, attempt, result.kind, result.errorCode ?? null, result.providerId);
+      // Without a webhook, nothing else would tell the agent when FaceTime is ready to hear the greeting.
+      if (watch && saved.providerId && result.kind !== "failed") watch(saved);
+      return saved;
     } catch (error) {
       const code = error?.code || "provider_timeout";
       if (!placed) {

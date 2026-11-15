@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/lib/*.test.ts"
+    "test": "node --import tsx --test src/lib/*.test.ts",
+    "doctor": "node scripts/live-doctor.mjs",
+    "live:user": "node scripts/live-user.mjs",
+    "scheduler": "node scripts/local-scheduler.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.1",
