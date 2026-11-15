@@ -61,13 +61,18 @@ function messageKind(type, event) {
   return null;
 }
 
-/** Constant-time comparison of the `key` query parameter with the configured webhook key. */
+/** Constant-time comparison of the key carried in the URL with the configured webhook key. */
 function urlKeyMatches(request, key) {
   if (!key) return false;
-  let given = "";
-  try { given = new URL(request.url).searchParams.get("key") || ""; } catch { return false; }
+  // The key may be the `key` query parameter or the last path segment (…/facetime/<key>), for dashboards that
+  // do not keep a query string.
+  let candidates = [];
+  try {
+    const url = new URL(request.url);
+    candidates = [url.searchParams.get("key") || "", decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() || "")];
+  } catch { return false; }
   const digest = (value) => createHash("sha256").update(value).digest();
-  return timingSafeEqual(digest(given), digest(key));
+  return candidates.some((given) => timingSafeEqual(digest(given), digest(key)));
 }
 
 /**

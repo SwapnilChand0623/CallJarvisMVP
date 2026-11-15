@@ -95,7 +95,9 @@ test("the webhook answers call.incoming only for a caller that holds the URL key
   assert.equal((await post("https://x/api/webhooks/chert/facetime?key=wrong")).status, 401);
   const accepted = await post("https://x/api/webhooks/chert/facetime?key=k-123");
   assert.deepEqual([accepted.status, await accepted.json()], [200, { action: "accept" }]);
-  assert.equal(decisions.length, 1);
+  assert.equal((await post("https://x/api/webhooks/chert/facetime/k-123")).status, 200, "key as the last path segment");
+  assert.equal((await post("https://x/api/webhooks/chert/facetime/nope")).status, 401);
+  assert.equal(decisions.length, 2);
   assert.equal((await webhook({}).post("https://x/api/webhooks/chert/facetime?key=")).status, 401, "no key configured refuses everything");
   const off = createFaceTimeWebhook({ store: {}, livekit: {}, urlKey: "k" });
   const declined = await off(new Request("https://x/?key=k", { method: "POST", body: JSON.stringify(incoming()) }));
