@@ -218,7 +218,7 @@ h3 {
 .welcome-footnote {
   position: absolute;
   bottom: 24px;
-  left: 8%;
+  left: 90px;
   color: #b6c5c9;
   font: italic 13px var(--antique);
   z-index: 1;
