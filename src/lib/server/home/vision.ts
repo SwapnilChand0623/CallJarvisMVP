@@ -47,7 +47,8 @@ export async function lookForProps(userId: string, image: unknown, env: Record<s
   if (!data || !/^[A-Za-z0-9+/=]+$/.test(data)) return { ok: false, status: 400, code: "image_required" };
   if (data.length * 0.75 > MAX_IMAGE_BYTES) return { ok: false, status: 413, code: "image_too_large" };
   if (now() - (lastLook.get(userId) ?? 0) < MIN_INTERVAL_MS) return { ok: false, status: 429, code: "too_many_requests" };
-  lastLook.set(userId, now());
+  const started = now();
+  lastLook.set(userId, started);
 
   let response: Response;
   try {
@@ -55,19 +56,26 @@ export async function lookForProps(userId: string, image: unknown, env: Record<s
       method: "POST",
       headers: { "x-goog-api-key": env.GEMINI_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: env.GEMINI_VISION_MODEL || "gemini-3.8-flash",
+        // The lite model with minimal thinking: this is a yes-or-no look at one frame, and it has to be quick.
+        model: env.GEMINI_VISION_MODEL || "gemini-flash-lite-latest",
         input: [{ type: "text", text: question() }, { type: "image", data, mime_type: "image/jpeg" }],
+        generation_config: { thinking_level: "minimal", temperature: 0, max_output_tokens: 60 },
         store: false,
       }),
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(20_000),
     });
-  } catch {
-    return { ok: false, status: 502, code: "vision_unreachable" };
+  } catch (error) {
+    const timedOut = (error as { name?: string } | null)?.name === "TimeoutError";
+    console.error(`[home] Gemini vision ${timedOut ? "gave no answer in 20 s" : "could not be reached"}`);
+    return { ok: false, status: 502, code: timedOut ? "vision_slow" : "vision_unreachable" };
   }
   if (!response.ok) {
-    console.error(`[home] Gemini vision answered HTTP ${response.status}`);
-    return { ok: false, status: 502, code: response.status === 429 ? "vision_busy" : "vision_failed" };
+    const detail = (await response.json().catch(() => null)) as { error?: { status?: unknown; message?: unknown } } | null;
+    console.error(`[home] Gemini vision answered HTTP ${response.status} ${String(detail?.error?.status ?? "")}: ${String(detail?.error?.message ?? "").slice(0, 200)}`);
+    return { ok: false, status: 502, code: response.status === 429 || response.status === 503 ? "vision_busy" : "vision_failed" };
   }
   const body = await response.json().catch(() => null);
-  return { ok: true, seen: parseSeen(body) };
+  const seen = parseSeen(body);
+  console.log(`[home] vision look took ${now() - started} ms; saw ${seen.length ? seen.join(", ") : "nothing on the prop map"}`);
+  return { ok: true, seen };
 }
