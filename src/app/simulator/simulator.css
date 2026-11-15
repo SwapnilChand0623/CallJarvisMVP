@@ -232,3 +232,28 @@ button.sim-tile {
 @media (prefers-reduced-motion: reduce) {
   .sim-live span { animation: none; }
 }
+
+/* Connection concepts share the Home page's parchment, ink and brass palette. */
+.home-connections { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.connection-card { min-width: 0; padding: 28px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.apple-home { background: radial-gradient(ellipse at top left, #e2e8dc, transparent 75%), var(--surface); }
+.connection-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 26px; }
+.connection-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; color: #315e70; background: #e3e7db; border: 1px solid #c1cbb9; }
+.connection-badge { font-size: 9px; font-weight: 600; letter-spacing: 1.3px; color: #75613c; border: 1px solid #d5c7a7; border-radius: 20px; padding: 6px 9px; }
+.connection-card h2 { font-size: 30px; margin: 12px 0; }
+.connection-card > p { color: var(--muted); font-size: 13px; line-height: 1.8; }
+.accessory-preview { display: flex; flex-wrap: wrap; gap: 10px; margin: 28px 0; }
+.accessory-preview span { display: flex; align-items: center; gap: 7px; padding: 10px; background: #ffffff66; border: 1px solid #cdd3c5; border-radius: 7px; font-size: 11px; }
+.apple-connect { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; border: 1px solid #111; border-radius: 7px; background: #161616; color: white; font: 500 15px Arial, sans-serif; cursor: pointer; }
+.apple-connect:hover { background: #303030; }
+.connection-card .connection-footnote { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 10px 0; }
+.apple-home > .connection-footnote { text-align: center; }
+.connection-method { display: flex; padding: 4px; gap: 5px; background: var(--background); border: 1px solid var(--border); border-radius: 6px; margin: 20px 0; }
+.connection-method button { display: flex; flex: 1; justify-content: center; align-items: center; gap: 8px; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 4px; padding: 11px 8px; cursor: pointer; font-size: 12px; }
+.connection-method button[aria-pressed="true"] { background: var(--surface-raised); border-color: var(--border); color: var(--foreground); box-shadow: 0 2px 4px #203d4e08; }
+.accessory-form { display: grid; gap: 14px; }
+.accessory-form label { display: grid; gap: 8px; font-size: 12px; }
+.accessory-form input { width: 100%; min-width: 0; padding: 13px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--foreground); font-size: 13px; }
+.connection-feedback { padding: 13px; border: 1px solid #c1cbb9; border-radius: 6px; background: #e8ecdf; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.connection-feedback p { margin: 5px 0 0; }
+@media (max-width: 760px) { .home-connections { grid-template-columns: 1fr; } .connection-card { padding: 22px; } }

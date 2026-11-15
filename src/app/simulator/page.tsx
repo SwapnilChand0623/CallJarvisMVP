@@ -5,6 +5,7 @@ import { useAccount } from "@/components/account-provider";
 import { Button } from "@/components/ui/button";
 import { PROPS, type Prop, type PropKey } from "@/lib/home/props";
 import "./simulator.css";
+import { HomeConnections } from "./home-connections";
 
 type Device = { id: string; name: string; kind: "light" | "stove"; on: boolean };
 type HomeEvent = { id: string; type: string; severity: string; description: string; occurredAt: string; outreachEligible: boolean; acknowledgedAt: string | null };
@@ -245,7 +246,7 @@ export default function Simulator() {
   }, [watching, call, trigger]);
 
   if (!state) {
-    return <p className="quiet-empty" role="status">{error || "Opening the home simulator…"}</p>;
+    return <p className="quiet-empty" role="status">{error || "Opening your home…"}</p>;
   }
   const away = state.mode === "away";
   const stove = state.devices.find((device) => device.kind === "stove");
@@ -257,7 +258,7 @@ export default function Simulator() {
       <div className="page-heading">
         <div>
           <span className="eyebrow">DEMO · EVERYTHING HERE IS SIMULATED</span>
-          <h1>Home simulator<span className="accent">.</span></h1>
+          <h1>Home</h1>
           <p>Props stand in for sensors. While the home is Away, Jarvis calls about what it sees.</p>
         </div>
         <Button variant="outline" disabled={busy} onClick={() => void act({ action: "reset" }, () => "Reset: Home mode, everything off, alerts cleared.")}>
@@ -265,6 +266,8 @@ export default function Simulator() {
         </Button>
       </div>
       {error && <p className="flow-error" role="alert">{error}</p>}
+
+      <HomeConnections />
 
       <section className="sim-card">
         <div className="sim-mode" role="group" aria-label="Home mode">
