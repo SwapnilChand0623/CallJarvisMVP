@@ -62,6 +62,31 @@ export function applyCallEvent(attempt, event) {
   return attempt;
 }
 
+/** Apply a reconciled provider observation without moving a finished attempt backward. */
+export function applyObserved(attempt, kind, errorCode = null, providerId = undefined) {
+  const next = { ...attempt, leaseUntil: null };
+  if (providerId) next.providerId = providerId;
+  if (kind === "unknown") {
+    if (next.status === "pending" || next.status === "sending") next.status = "unknown";
+    if (errorCode) next.errorCode = errorCode;
+    return next;
+  }
+  if (kind === "unanswered") {
+    return { ...applyCallEvent(next, { type: "call.ended", data: { reason: errorCode } }), leaseUntil: null, providerId: next.providerId };
+  }
+  if (kind === "failed") {
+    return { ...applyCallEvent(next, { type: "call.failed", data: { reason: errorCode } }), leaseUntil: null, providerId: next.providerId };
+  }
+  const advanced = advance(next, kind, null);
+  const clearError = kind === "accepted" || kind === "answered" || kind === "completed" || kind === "simulated";
+  return { ...advanced, leaseUntil: null, providerId: next.providerId, errorCode: clearError ? null : advanced.errorCode };
+}
+
+export function suppress(attempt) {
+  if (TERMINAL.has(attempt.status)) return { ...attempt, leaseUntil: null };
+  return { ...advance(attempt, "failed", "suppressed"), leaseUntil: null, simulated: false };
+}
+
 export function outcomeOf(attempt) {
   if (attempt.status === "failed" && attempt.errorCode === "suppressed") return "suppressed";
   if (attempt.status === "pending" || attempt.status === "sending" || attempt.status === "unknown") return "unknown";

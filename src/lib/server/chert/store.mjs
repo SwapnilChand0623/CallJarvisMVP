@@ -27,9 +27,23 @@ export function createMemoryStore({ attempts = [], profiles = [], reminders = []
     releaseEvent(eventId) {
       events.delete(eventId);
     },
+    async claimSend(attemptId, patch) {
+      const current = byId.get(attemptId);
+      if (!current || current.status !== "pending") return null;
+      const next = { ...current, ...patch, status: "sending", updatedAt: new Date().toISOString() };
+      byId.set(attemptId, next);
+      return clone(next);
+    },
     async findByProvider(channel, providerId) {
       for (const attempt of byId.values()) {
         if (attempt.channel === channel && attempt.providerId === providerId) return clone(attempt);
+      }
+      return null;
+    },
+    async findByKey(key) {
+      if (!key) return null;
+      for (const attempt of byId.values()) {
+        if (attempt.idempotencyKey === key) return clone(attempt);
       }
       return null;
     },
@@ -38,6 +52,12 @@ export function createMemoryStore({ attempts = [], profiles = [], reminders = []
       const matches = people.filter((profile) => normalizeHandle(profile.destination) === key);
       if (matches.length !== 1) return null;
       return clone(matches[0]);
+    },
+    async latestOutboundAttempt(userId, channel) {
+      const candidates = [...byId.values()]
+        .filter((attempt) => attempt.userId === userId && attempt.channel === channel && attempt.providerId)
+        .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+      return candidates[0] ? clone(candidates[0]) : null;
     },
     async latestOpenReminder(userId) {
       const candidates = [...byId.values()]
@@ -176,8 +196,27 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
     releaseEvent(eventId) {
       void rest(env, fetchImpl, `provider_events?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" }).catch(() => {});
     },
+    async claimSend(attemptId, patch) {
+      const rows = await rest(env, fetchImpl, `notification_attempts?id=eq.${encodeURIComponent(attemptId)}&status=eq.pending`, {
+        method: "PATCH",
+        body: {
+          status: "sending",
+          idempotency_key: patch.idempotencyKey,
+          lease_until: patch.leaseUntil,
+          room_name: patch.roomName ?? null,
+          simulated: false,
+        },
+      });
+      if (!Array.isArray(rows) || rows.length === 0) return null;
+      return this.getAttempt(attemptId);
+    },
     async findByProvider(channel, providerId) {
       const rows = await rest(env, fetchImpl, `notification_attempts?channel=eq.${encodeURIComponent(channel)}&provider_id=eq.${encodeURIComponent(providerId)}&select=id&limit=1`);
+      if (!rows?.[0]) return null;
+      return this.getAttempt(rows[0].id);
+    },
+    async findByKey(key) {
+      const rows = await rest(env, fetchImpl, `notification_attempts?idempotency_key=eq.${encodeURIComponent(key)}&select=id&limit=1`);
       if (!rows?.[0]) return null;
       return this.getAttempt(rows[0].id);
     },
@@ -186,6 +225,11 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
       const rows = await rest(env, fetchImpl, `profiles?verified_destination=eq.${encodeURIComponent(key)}&select=user_id,verified_destination,outreach_enabled,channels`);
       if (!Array.isArray(rows) || rows.length !== 1) return null;
       return { userId: rows[0].user_id, destination: rows[0].verified_destination, outreachEnabled: rows[0].outreach_enabled !== false, channels: rows[0].channels ?? null };
+    },
+    async latestOutboundAttempt(userId, channel) {
+      const rows = await rest(env, fetchImpl, `notification_attempts?user_id=eq.${encodeURIComponent(userId)}&channel=eq.${encodeURIComponent(channel)}&provider_id=not.is.null&order=updated_at.desc&select=id&limit=1`);
+      if (!rows?.[0]) return null;
+      return this.getAttempt(rows[0].id);
     },
     async latestOpenReminder(userId) {
       const rows = await rest(env, fetchImpl, `notification_attempts?user_id=eq.${encodeURIComponent(userId)}&channel=eq.imessage&reminder_id=not.is.null&provider_id=not.is.null&order=updated_at.desc&select=reminder_id&limit=5`);

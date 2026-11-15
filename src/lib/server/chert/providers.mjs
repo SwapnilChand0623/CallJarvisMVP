@@ -106,16 +106,17 @@ export function createLiveKit(env = process.env, fetchImpl = fetch) {
         sourceKind: attempt.sourceKind,
         sourceId: attempt.sourceId,
         revision: attempt.revision,
+        reminderId: attempt.sourceKind === "reminder" ? attempt.sourceId : null,
         channel: "facetime",
         greeting: "bridge_ready",
       });
-      await twirp(env, fetchImpl, "RoomService", "CreateRoom", { name: room, empty_timeout: 180, metadata });
+      await twirp(env, fetchImpl, "RoomService", "CreateRoom", { name: room, empty_timeout: 600, metadata });
       await twirp(env, fetchImpl, "AgentDispatchService", "CreateDispatch", {
         agent_name: agentName,
         room,
         metadata,
       });
-      const deadline = Date.now() + 2400;
+      const deadline = Date.now() + 8000;
       while (Date.now() < deadline) {
         const listed = await twirp(env, fetchImpl, "RoomService", "ListParticipants", { room });
         const people = listed.participants ?? [];
@@ -175,7 +176,7 @@ export function createFaceTime(env = process.env, fetchImpl = fetch, tokens) {
       const list = Array.isArray(items) ? items : [];
       const call = list.find((item) => item.idempotency_key === attempt.idempotencyKey || item.room === attempt.roomName) ?? list[0];
       if (!call) return { provenAbsent: true, call: null };
-      return { provenAbsent: false, call: { providerId: call.id, status: call.status === "active" ? "answered" : "accepted" } };
+      return { provenAbsent: false, call: { providerId: call.id, status: "accepted" } };
     },
     async create(attempt) {
       const room = roomNameFor(attempt);
@@ -198,10 +199,19 @@ export function createFaceTime(env = process.env, fetchImpl = fetch, tokens) {
       });
       const providerId = body?.data?.id ?? null;
       if (response.status === 201 && providerId) return { kind: "accepted", providerId };
+      if (response.status === 201) return { kind: "unknown", providerId: null, errorCode: "missing_call_id" };
       if (response.status === 202) return { kind: "unknown", providerId };
       if (response.status === 409) return { kind: "unknown", providerId, errorCode: "idempotency_conflict" };
       if (providerId && response.ok) return { kind: "unknown", providerId };
       return { kind: "failed", providerId, errorCode: body?.error?.code || `facetime_http_${response.status}` };
+    },
+    async read(providerId) {
+      const { response, body } = await request(`/v1/calls/${encodeURIComponent(providerId)}`);
+      if (response.status === 404) return { provenAbsent: true, call: null };
+      if (!response.ok) return { provenAbsent: false, call: null };
+      const call = body?.data ?? null;
+      if (!call?.id) return { provenAbsent: false, call: null };
+      return { provenAbsent: false, call };
     },
   };
 }
@@ -231,6 +241,20 @@ export function createIMessage(env = process.env, fetchImpl = fetch) {
       if (body.status === "failed") return { kind: "failed", providerId, errorCode: String(body.code ?? "send_failed") };
       if (!response.ok) return { kind: "failed", providerId, errorCode: `imessage_http_${response.status}` };
       return { kind: "unknown", providerId };
+    },
+    async read(messageId) {
+      const response = await fetchImpl(`https://console.trychert.com/api/v1/messages/${encodeURIComponent(messageId)}`, {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 404) return { provenAbsent: true, status: null, providerId: messageId };
+      if (!response.ok) return { provenAbsent: false, status: null, providerId: messageId };
+      return {
+        provenAbsent: false,
+        status: body.status ?? body.data?.status ?? null,
+        providerId: body.message_id ?? body.data?.id ?? messageId,
+      };
     },
   };
 }
