@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, AudioLines, Check, Mail } from "lucide-react";
+import { ArrowRight, Check, Mail } from "lucide-react";
+import { JarvisCore } from "@/components/jarvis-core";
 import { Brand } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/components/account-provider";
@@ -31,8 +32,8 @@ export default function Auth() {
             Your reminders, a conversation away. Meet the assistant you can
             simply call.
           </p>
-          <div className="voice-illustration" aria-hidden="true">
-            <AudioLines size={70} strokeWidth={1.2} />
+          <div className="voice-illustration">
+            <JarvisCore />
           </div>
           <div className="example-bubble">
             “Remind me to pick up my prescription tomorrow.”

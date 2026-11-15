@@ -3,6 +3,7 @@ import { DemoProvider } from "@/components/demo-provider";
 import { Shell } from "@/components/shell";
 import { AccountProvider } from "@/components/account-provider";
 import "./globals.css";
+import "./theme.css";
 export const metadata: Metadata = {
   title: "CallJarvis · A little more peace of mind",
   description:

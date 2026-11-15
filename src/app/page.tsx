@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight, BellRing, Check, Copy, Phone, Plus } from "lucide-react";
+import { JarvisCore } from "@/components/jarvis-core";
 import { useAccount } from "@/components/account-provider";
 import { Button } from "@/components/ui/button";
 import { loadReminders } from "@/lib/supabase/reminders";
@@ -131,11 +132,7 @@ export default function Home() {
           {copyError && <p role="status">{copyError}</p>}
         </div>
         <div className="call-art" aria-hidden="true">
-          <div className="call-orbit" />
-          <div className="call-orbit inner" />
-          <div className="call-orb">
-            <Phone size={43} strokeWidth={1.3} />
-          </div>
+          <JarvisCore />
           <span className="call-speech">“What do I have coming up?”</span>
         </div>
       </section>

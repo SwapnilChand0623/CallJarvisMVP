@@ -1,22 +1,21 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import {
-  AudioLines,
-  House,
-  BellRing,
-  UserRound,
-  ArrowUpRight,
-} from "lucide-react";
+import { House, BellRing, UserRound, ArrowUpRight } from "lucide-react";
 import { useAccount } from "./account-provider";
 export function Brand() {
   return (
-    <Link href="/" className="brand">
-      <span className="brand-icon">
-        <AudioLines size={23} />
-      </span>
-      calljarvis<span className="brand-dot">.</span>
+    <Link href="/" className="brand" aria-label="CallJarvis home">
+      <Image
+        src="/brand/calljarvis-logo.png"
+        alt="CallJarvis"
+        width={884}
+        height={588}
+        className="brand-logo"
+        preload
+      />
     </Link>
   );
 }

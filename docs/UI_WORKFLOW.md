@@ -19,3 +19,7 @@ The backend workstream must verify ownership and consent before promoting a requ
 - ESLint, TypeScript, production webpack build, and 14 unit tests.
 - Local browser fixture: signup routing, phone validation/save, homepage empty/populated states, reminder creation/snooze, account details, sign-out, returning-user sign-in, email confirmation, and the configured/unconfigured call card.
 - Local fixture requests do not create hosted accounts, modify the hosted database, or send calls/messages. Hosted email delivery, phone verification, and real Chert calls remain integration checks.
+
+## Visual theme
+
+`src/app/theme.css` defines the navy/cyan palette across account onboarding and reminders. The supplied CallJarvis logo is preserved in `public/brand/calljarvis-logo.png`; CSS clips its surrounding whitespace when displayed. `JarvisCore` provides decorative, screen-reader-hidden rings with CSS transforms, without an animation dependency. Page reveals last 360–420 ms, controls transition in 160 ms, and the two ambient ring layers turn slowly. Reduced-motion preferences disable animations and transitions. Compact screens omit the large sign-in illustration and use a small, subdued ring on the call card.
