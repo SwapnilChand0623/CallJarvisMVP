@@ -23,7 +23,7 @@ Everything below is deployed from `main` and has been used on a real phone unles
 | "Call me back in N minutes" | Working |
 | Avatar on FaceTime Video calls (the dashboard's wooden horse mark; turns red for critical) | Working |
 | Home simulator at `/simulator`: Home/Away, stove, porch light, prop map, camera | Working |
-| Camera prop recognition through Gemini (Red Bull can, black box) | Unconfirmed since the model was changed in PR #12; the Trigger buttons always work |
+| Camera prop recognition through Gemini (Red Bull can, black box) | Working |
 | Stove on while Away raises a critical alert and a call within seconds | Deployed in PR #15; confirmed by the user's video alert test |
 | Critical home alerts are FaceTime **Video** calls showing the live camera | Working (user confirmed "it works") |
 | "Show me the camera" on a video call the user places | Deployed in PR #17; **not yet tried on a real call** |
