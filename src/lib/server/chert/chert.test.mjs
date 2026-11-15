@@ -5,7 +5,7 @@ import { summarizeLine, summarizeMessaging, resolveCapabilities } from "./capabi
 import { createDeliver, interpretCall } from "./deliver.mjs";
 import { createOutreachHandler } from "./http.mjs";
 import { createFaceTime, createIMessage, createLiveKit, participantHasAudio } from "./providers.mjs";
-import { createMemoryStore } from "./store.mjs";
+import { createMemoryStore, createSupabaseStore } from "./store.mjs";
 import { createFaceTimeWebhook, createIMessageWebhook } from "./webhooks.mjs";
 
 function attempt(overrides = {}) {
@@ -430,3 +430,68 @@ function messageEvent(id, handle, text) {
     },
   });
 }
+
+test("Supabase outreach uses deployed columns and simulates only after atomic authorization", async () => {
+  const row = {
+    id: "attempt", user_id: "user", reminder_id: "reminder", revision: 1,
+    channel: "facetime", stage: "initial", status: "pending", idempotency_key: "database-key",
+  };
+  const profile = {
+    destination: "+15551230000", verified_at: "2026-11-14T10:00:00Z",
+    outreach_enabled: true, opted_in_channels: ["facetime"],
+  };
+  let authorizations = 0;
+  let writes = 0;
+  let allowDelivery = false;
+  const store = createSupabaseStore({
+    SUPABASE_URL: "https://database.test",
+    SUPABASE_SERVICE_ROLE_KEY: "fixture",
+  }, async (url, options) => {
+    const parsed = new URL(url);
+    switch (parsed.pathname) {
+      case "/rest/v1/profiles":
+        assert.equal(parsed.searchParams.get("select"), "user_id,destination,verified_at,outreach_enabled,opted_in_channels");
+        return Response.json([profile]);
+      case "/rest/v1/reminders":
+        return Response.json([{ title: "Test reminder", status: "pending" }]);
+      case "/rest/v1/rpc/begin_notification_delivery":
+        assert.equal(options.method, "POST");
+        assert.deepEqual(JSON.parse(options.body), { p_attempt_id: row.id });
+        authorizations++;
+        if (!allowDelivery || row.status !== "pending") return Response.json(null);
+        row.status = "sending";
+        return Response.json({
+          attemptId: row.id, userId: row.user_id, channel: row.channel,
+          destination: profile.destination, idempotencyKey: row.idempotency_key,
+        });
+      case "/rest/v1/notification_attempts":
+        if (options.method === "PATCH") {
+          assert.equal(row.status, "sending");
+          const patch = JSON.parse(options.body);
+          assert.deepEqual(Object.keys(patch).sort(), [
+            "error_code", "outcome_at", "provider_id", "simulated", "status",
+          ]);
+          Object.assign(row, patch);
+          writes++;
+        }
+        return Response.json([row]);
+      default:
+        assert.fail(`Unexpected PostgREST request: ${parsed.pathname}`);
+    }
+  });
+  const deliver = createDeliver({
+    store,
+    capabilities: async () => ({ facetime: { live: false } }),
+    facetime: { create: async () => assert.fail("Simulation must not dial") },
+  });
+  assert.equal((await deliver(row.id)).body.outcome, "unknown");
+  assert.equal(authorizations, 1);
+  assert.equal(writes, 0);
+
+  allowDelivery = true;
+  const overlapping = await Promise.all([deliver(row.id), deliver(row.id)]);
+  assert.ok(overlapping.some(({ body }) => body.outcome === "simulated"));
+  assert.equal(writes, 1);
+  assert.equal((await deliver(row.id)).body.outcome, "simulated");
+  assert.equal(writes, 1);
+});

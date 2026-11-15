@@ -128,11 +128,12 @@ async function rest(env, fetchImpl, path, { method = "GET", body, prefer } = {})
 
 export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
   return {
+    canReplayUnconfirmedCall: false,
     async getAttempt(id) {
       const rows = await rest(env, fetchImpl, `notification_attempts?id=eq.${encodeURIComponent(id)}&select=*`);
       const row = rows?.[0];
       if (!row) return null;
-      const profiles = await rest(env, fetchImpl, `profiles?user_id=eq.${encodeURIComponent(row.user_id)}&select=user_id,verified_destination,outreach_enabled,channels&limit=1`);
+      const profiles = await rest(env, fetchImpl, `profiles?user_id=eq.${encodeURIComponent(row.user_id)}&select=user_id,destination,verified_at,outreach_enabled,opted_in_channels&limit=1`);
       const profile = profiles?.[0];
       const kind = sourceKind(row);
       const table = kind === "reminder" ? "reminders" : kind === "home_event" ? "home_events" : "check_ins";
@@ -152,17 +153,17 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
         providerId: row.provider_id ?? null,
         errorCode: row.error_code ?? null,
         simulated: row.simulated === true,
-        destination: profile?.verified_destination ?? null,
+        destination: profile?.verified_at ? profile.destination : null,
         active: activeSource(kind, source, now),
         acknowledged: Boolean(source?.acknowledged_at),
-        outreachEnabled: profile?.outreach_enabled !== false,
-        channels: Array.isArray(profile?.channels) ? profile.channels : null,
+        outreachEnabled: profile?.outreach_enabled === true,
+        channels: Array.isArray(profile?.opted_in_channels) ? profile.opted_in_channels : [],
         title: source?.title || source?.description || "CallJarvis alert",
         snoozedUntil: source?.snoozed_until ?? null,
-        leaseUntil: row.lease_until ?? null,
-        roomName: row.room_name ?? null,
-        greetingActivated: row.greeting_activated === true,
-        updatedAt: row.updated_at ?? null,
+        leaseUntil: null,
+        roomName: null,
+        greetingActivated: row.status === "answered" || row.status === "completed",
+        updatedAt: row.outcome_at ?? row.created_at,
       };
     },
     async save(attempt) {
@@ -170,13 +171,9 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
         method: "PATCH",
         body: {
           status: attempt.status,
-          idempotency_key: attempt.idempotencyKey,
           provider_id: attempt.providerId,
           error_code: attempt.errorCode,
           simulated: attempt.simulated === true || attempt.status === "simulated",
-          lease_until: attempt.leaseUntil,
-          room_name: attempt.roomName,
-          greeting_activated: attempt.greetingActivated === true,
           outcome_at: new Date().toISOString(),
         },
       });
@@ -196,19 +193,19 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
     releaseEvent(eventId) {
       void rest(env, fetchImpl, `provider_events?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" }).catch(() => {});
     },
-    async claimSend(attemptId, patch) {
-      const rows = await rest(env, fetchImpl, `notification_attempts?id=eq.${encodeURIComponent(attemptId)}&status=eq.pending`, {
-        method: "PATCH",
-        body: {
-          status: "sending",
-          idempotency_key: patch.idempotencyKey,
-          lease_until: patch.leaseUntil,
-          room_name: patch.roomName ?? null,
-          simulated: false,
-        },
+    async claimSend(attemptId) {
+      const claim = await rest(env, fetchImpl, "rpc/begin_notification_delivery", {
+        method: "POST",
+        body: { p_attempt_id: attemptId },
       });
-      if (!Array.isArray(rows) || rows.length === 0) return null;
-      return this.getAttempt(attemptId);
+      if (claim?.attemptId !== attemptId || !claim.idempotencyKey || !claim.destination) return null;
+      return {
+        id: claim.attemptId,
+        idempotencyKey: claim.idempotencyKey,
+        destination: claim.destination,
+        channel: claim.channel,
+        userId: claim.userId,
+      };
     },
     async findByProvider(channel, providerId) {
       const rows = await rest(env, fetchImpl, `notification_attempts?channel=eq.${encodeURIComponent(channel)}&provider_id=eq.${encodeURIComponent(providerId)}&select=id&limit=1`);
@@ -222,17 +219,17 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
     },
     async findUserByHandle(handle) {
       const key = normalizeHandle(handle);
-      const rows = await rest(env, fetchImpl, `profiles?verified_destination=eq.${encodeURIComponent(key)}&select=user_id,verified_destination,outreach_enabled,channels`);
+      const rows = await rest(env, fetchImpl, `profiles?verified_at=not.is.null&destination=eq.${encodeURIComponent(key)}&select=user_id,destination,verified_at,outreach_enabled,opted_in_channels`);
       if (!Array.isArray(rows) || rows.length !== 1) return null;
-      return { userId: rows[0].user_id, destination: rows[0].verified_destination, outreachEnabled: rows[0].outreach_enabled !== false, channels: rows[0].channels ?? null };
+      return { userId: rows[0].user_id, destination: rows[0].destination, outreachEnabled: rows[0].outreach_enabled !== false, channels: rows[0].opted_in_channels ?? [] };
     },
     async latestOutboundAttempt(userId, channel) {
-      const rows = await rest(env, fetchImpl, `notification_attempts?user_id=eq.${encodeURIComponent(userId)}&channel=eq.${encodeURIComponent(channel)}&provider_id=not.is.null&order=updated_at.desc&select=id&limit=1`);
+      const rows = await rest(env, fetchImpl, `notification_attempts?user_id=eq.${encodeURIComponent(userId)}&channel=eq.${encodeURIComponent(channel)}&provider_id=not.is.null&order=outcome_at.desc.nullslast,created_at.desc&select=id&limit=1`);
       if (!rows?.[0]) return null;
       return this.getAttempt(rows[0].id);
     },
     async latestOpenReminder(userId) {
-      const rows = await rest(env, fetchImpl, `notification_attempts?user_id=eq.${encodeURIComponent(userId)}&channel=eq.imessage&reminder_id=not.is.null&provider_id=not.is.null&order=updated_at.desc&select=reminder_id&limit=5`);
+      const rows = await rest(env, fetchImpl, `notification_attempts?user_id=eq.${encodeURIComponent(userId)}&channel=eq.imessage&reminder_id=not.is.null&provider_id=not.is.null&order=outcome_at.desc.nullslast,created_at.desc&select=reminder_id&limit=5`);
       for (const row of rows ?? []) {
         const reminders = await rest(env, fetchImpl, `reminders?id=eq.${encodeURIComponent(row.reminder_id)}&user_id=eq.${encodeURIComponent(userId)}&acknowledged_at=is.null&select=id,user_id&limit=1`);
         if (reminders?.[0]) return { id: reminders[0].id, userId };

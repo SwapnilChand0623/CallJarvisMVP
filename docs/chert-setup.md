@@ -70,7 +70,7 @@ The checks cover one simulated attempt, a single live create under two concurren
 
 ## Dependencies still owned elsewhere
 
-- Gemini's `notification_attempts` row needs `idempotency_key`, `provider_id`, `error_code`, `simulated`, `lease_until`, `room_name`, `greeting_activated`, and `outcome_at`. Webhook dedup uses `provider_events(id)` when that table exists.
-- Profiles need `verified_destination` stored in the same normalized form (E.164 or lowercase email), `outreach_enabled`, and `channels`.
+- The Supabase adapter reads `destination`, `verified_at` and `opted_in_channels`, and authorizes sends through `begin_notification_delivery`. Use a normalized destination (E.164 or lowercase email).
+- Run the hosted integration in simulation mode until durable webhook deduplication is wired. The webhook store expects `provider_events`, which is absent from the deployed schema. For a hosted FaceTime attempt with an unknown outcome and no provider ID, leave the attempt for reconciliation without starting another call.
 - Codex should keep calling `POST /api/internal/outreach` with the claimed attempt id and treat HTTP 200 plus `outcome: "unknown"` as in flight, not as a reason to claim a second attempt.
 - Claude Code's worker must greet only when room metadata gains `chert_bridge_ready`, and its voice route should accept `inboundMessage` for iMessage text.

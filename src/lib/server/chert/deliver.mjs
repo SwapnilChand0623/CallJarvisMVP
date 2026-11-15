@@ -64,7 +64,8 @@ function settled(attempt) {
     || attempt.status === "completed"
     || attempt.status === "simulated"
     || attempt.status === "unanswered"
-    || attempt.status === "failed";
+    || attempt.status === "failed"
+    || attempt.status === "canceled";
 }
 
 async function remember(store, attempt, kind, errorCode, providerId) {
@@ -93,6 +94,10 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
 
     if (settled(attempt)) return finish(attempt);
     if (leaseOpen(attempt, now)) return finish(attempt);
+    if (store.canReplayUnconfirmedCall === false && attempt.status === "sending" && !attempt.providerId) {
+      // The sender may still be running. Only that execution or a verified callback can settle it.
+      return finish(attempt);
+    }
 
     if (needsReconcile(attempt, now)) {
       if (!attempt.idempotencyKey && !attempt.providerId) {
@@ -119,13 +124,20 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
     }
 
     const fresh = await store.getAttempt(attempt.id);
-    if (!fresh || !eligible(fresh, now)) {
+    if (!fresh || settled(fresh)) return finish(fresh || attempt);
+    if (!eligible(fresh, now)) {
       const suppressed = suppress(fresh || claimed);
       await store.save(suppressed);
       return finish(suppressed);
     }
 
-    const outbound = { ...fresh, destination: normalizeHandle(fresh.destination), idempotencyKey: key };
+    if (claimed.destination !== fresh.destination || claimed.channel !== fresh.channel ||
+      claimed.userId !== fresh.userId) return finish(fresh);
+    const outbound = {
+      ...fresh,
+      destination: normalizeHandle(claimed.destination),
+      idempotencyKey: claimed.idempotencyKey,
+    };
     if (!channelLive(caps, outbound.channel)) {
       const simulated = {
         ...outbound,
@@ -184,6 +196,9 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
       if (!read?.call) return remember(store, attempt, "unknown", "delivery_unconfirmed", attempt.providerId);
       const observed = interpretCall(read.call, attempt);
       return remember(store, attempt, observed.kind, observed.errorCode ?? null, observed.providerId);
+    }
+    if (store.canReplayUnconfirmedCall === false) {
+      return remember(store, attempt, "unknown", "delivery_unconfirmed");
     }
     try {
       const result = await facetime.create(attempt);
