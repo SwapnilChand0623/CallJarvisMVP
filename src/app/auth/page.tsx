@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Mail } from "lucide-react";
 import { JarvisCore } from "@/components/jarvis-core";
+import { OdysseyArtifacts } from "@/components/odyssey-artifacts";
 import { Brand } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/components/account-provider";
@@ -27,6 +28,7 @@ export default function Auth() {
   return (
     <div className="welcome-layout">
       <section className="welcome-story">
+        <OdysseyArtifacts />
         <Brand />
         <div className="welcome-story-copy">
           <span className="eyebrow">YOUR EVERYDAY ODYSSEY</span>

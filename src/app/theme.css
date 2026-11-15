@@ -185,6 +185,51 @@ h3 {
 .welcome-story .brand {
   z-index: 1;
 }
+.odyssey-artifacts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  color: #52665d;
+  overflow: hidden;
+}
+.odyssey-artifacts svg { position: absolute; }
+.odyssey-warrior {
+  width: 32%;
+  max-width: 220px;
+  right: -3%;
+  top: 150px;
+  opacity: 0.085;
+}
+.odyssey-bow {
+  width: 25%;
+  right: 7%;
+  bottom: 295px;
+  transform: rotate(-22deg);
+  opacity: 0.11;
+}
+.odyssey-inscription {
+  width: 32%;
+  right: 4%;
+  top: 34px;
+  opacity: 0.18;
+}
+.odyssey-meander {
+  width: 55%;
+  left: 8%;
+  bottom: 330px;
+  opacity: 0.13;
+}
+@media (max-width: 1000px) {
+  .odyssey-inscription { top: 99px; width: 34%; }
+  .odyssey-warrior { opacity: 0.06; }
+}
+@media (max-width: 760px) {
+  .odyssey-inscription { top: 78px; right: 3%; width: 28%; }
+  .odyssey-warrior { top: 130px; width: 30%; right: -5%; }
+  .odyssey-bow { bottom: 145px; right: 5%; width: 22%; opacity: 0.08; }
+  .odyssey-meander { bottom: 165px; left: 25px; width: 48%; }
+}
 .welcome-story-copy {
   margin: 52px 0 310px;
   position: static;
