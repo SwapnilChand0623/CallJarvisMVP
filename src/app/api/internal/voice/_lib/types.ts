@@ -66,6 +66,8 @@ export type Store = {
   listCallEvents(userId: string, limit: number): Promise<CallEvent[]>;
   /** Recent FaceTime attempts with what each was about, newest first. */
   listCallAttempts(userId: string, limit: number): Promise<CallAttempt[]>;
+  /** The id of the user's FaceTime call about a critical home alert that is ringing or in progress, if any. */
+  findLiveAlertCall(userId: string): Promise<string | null>;
   /** Marks one event acknowledged. Returns null when it does not exist for this owner. */
   acknowledgeHomeEvent(userId: string, id: string): Promise<HomeEvent | null>;
   setDeviceState(userId: string, deviceId: string, on: boolean): Promise<Device | null>;

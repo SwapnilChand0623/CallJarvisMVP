@@ -33,13 +33,14 @@ const talks = `Supportive conversation:
 const line = item => `- ${item.title}: ${item.overdue ? 'overdue, was due' : 'due'} ${item.due}, ${item.priority} priority${item.acknowledged ? ', acknowledged' : ''} (id ${item.id})`;
 
 /** @param {any} context the session.start result, or null when tools are unavailable */
-export function buildInstructions(context) {
+export function buildInstructions(context, call = {}) {
   if (!context) return [base, withoutTools, talks].join('\n\n');
   const lines = [
     'Context for this call (private; use it naturally, do not recite it):',
     context.user?.name ? `The user's name is ${context.user.name}.` : null,
     `Current local time: ${context.now.spoken} (${context.now.local}, ${context.user?.timeZone}).`,
     context.focusReminder ? `You placed this call about this reminder:\n${line(context.focusReminder)}\nacknowledgeReminder, completeReminder and snoozeReminder with no reminder argument apply to it.` : null,
+    call.feed ? 'This is a FaceTime Video call. The user is shown the live home camera when it is on; you cannot see the video yourself, so never describe what is in it.' : null,
     context.focusEvent ? `You placed this call about this home event: ${context.focusEvent.description} (${context.focusEvent.when}, ${context.focusEvent.simulated ? 'from the home simulator' : 'from a home sensor'}).${context.focusEvent.suggestion ? ` ${context.focusEvent.suggestion}` : ''} Act only after the user says yes. Once the user has heard it, call acknowledgeHomeEvent with no arguments.` : null,
     context.home ? `The home is set to ${context.home.mode === 'away' ? 'Away' : 'Home'}. Devices: ${context.home.devices.length ? context.home.devices.map(device => `${device.name} (${device.on ? 'on' : 'off'})`).join(', ') : 'none'}.` : null,
     context.openReminders?.length

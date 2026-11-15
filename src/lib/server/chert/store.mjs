@@ -159,6 +159,8 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
         outreachEnabled: profile?.outreach_enabled === true,
         channels: Array.isArray(profile?.opted_in_channels) ? profile.opted_in_channels : [],
         title: source?.title || source?.description || "CallJarvis alert",
+        // A critical home alert is placed as a FaceTime Video call with the live camera.
+        video: kind === "home_event" && source?.severity === "critical",
         snoozedUntil: source?.snoozed_until ?? null,
         leaseUntil: null,
         roomName: null,

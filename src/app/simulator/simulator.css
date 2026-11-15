@@ -209,3 +209,26 @@ button.sim-tile {
     grid-column: span 2;
   }
 }
+
+.sim-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b8402f;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 12px 0 0;
+}
+.sim-live span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #b8402f;
+  animation: sim-live-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sim-live-pulse {
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sim-live span { animation: none; }
+}

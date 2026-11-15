@@ -51,3 +51,16 @@ Home or Away ("I'm heading out").
 - The account needs a verified phone and FaceTime outreach, as for reminders.
 
 The first visit creates a simulated stove and porch light for the account.
+
+## Live camera on alert calls
+
+A call about a critical home alert is placed as a FaceTime Video call. While it is ringing or in progress, the
+simulator page (with its camera started) joins the call's LiveKit room with a publish-only token from
+`POST /api/home/camera` and streams a 320-pixel-wide, 12 fps copy of the camera. The worker relays those frames
+onto its own video track at 320x180, because FaceTime shows only the worker's video. Without a camera the call
+shows Jarvis's avatar.
+
+- Run the camera on a different device from the phone that takes the call: a phone pauses its camera when FaceTime rings.
+- If the line refuses a video call, the alert is placed again as an audio call.
+- `ALERT_VIDEO=0` on `web` turns this off, and alert calls go back to audio.
+- The video passes through LiveKit and FaceTime live. Nothing is recorded or stored.

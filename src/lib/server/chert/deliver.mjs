@@ -178,9 +178,18 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
     try {
       const prepared = await livekit.prepare(attempt);
       placed = true;
-      const result = await facetime.create(attempt, { agentIdentity: prepared?.agentIdentity });
+      let result = await facetime.create(attempt, { agentIdentity: prepared?.agentIdentity });
+      let video = attempt.video === true && process.env.ALERT_VIDEO !== "0";
+      // If the line refuses a video call, the alert still goes out as an audio call.
+      if (video && result.kind === "failed") {
+        console.warn(`[outreach] video call refused (${result.errorCode}); placing an audio call instead`);
+        result = await facetime.create(attempt, { agentIdentity: prepared?.agentIdentity, video: false });
+        video = false;
+      }
       const saved = await remember(store, attempt, result.kind, result.errorCode ?? null, result.providerId);
-      if (result.kind !== "failed") await store.logEvent?.(saved, "call_placed", "Jarvis started a FaceTime Audio call to you.");
+      if (result.kind !== "failed") await store.logEvent?.(saved, "call_placed", video
+        ? "Jarvis started a FaceTime Video call to you, showing the live home camera when it is on."
+        : "Jarvis started a FaceTime Audio call to you.");
       // Without a webhook, nothing else would tell the agent when FaceTime is ready to hear the greeting.
       if (watch && saved.providerId && result.kind !== "failed") watch(saved);
       return saved;

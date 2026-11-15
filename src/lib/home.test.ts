@@ -206,3 +206,28 @@ test("jarvis: setting Away by voice with the stove on raises the same alert", as
   assert.ok((await runAction(deps, actor, "setHomeMode", { mode: "away" })).ok);
   assert.deepEqual(store.data.homeEvents.filter((event) => event.userId === FRESH_USER).map((event) => [event.type, event.severity]), [["stove_on", "critical"]]);
 });
+
+test("camera: only the owner of a live critical alert call gets a publish-only token for that call's room", async () => {
+  const { cameraSession } = await import("./server/home/camera");
+  const { store } = setup();
+  const env = { LIVEKIT_URL: "wss://lk.example", LIVEKIT_API_KEY: "key", LIVEKIT_API_SECRET: "secret" };
+  const call = (patch: object) => ({ id: "aaaaaaaa-0000-4000-8000-000000000001", userId: FRESH_USER, stage: "initial", status: "accepted", errorCode: null,
+    simulated: false, createdAt: new Date().toISOString(), outcomeAt: null,
+    about: { kind: "home_event" as const, text: "The gas stove appears to be on", at: null, priority: "critical" }, ...patch });
+  assert.deepEqual(await cameraSession(store, FRESH_USER, env), { live: false }, "no call, no token");
+
+  store.data.callAttempts.push(call({}));
+  const session = await cameraSession(store, FRESH_USER, env);
+  assert.ok(session.live);
+  assert.deepEqual([session.url, session.room], ["wss://lk.example", "cj-aaaaaaaa000040008000000000000001"]);
+  const claims = JSON.parse(Buffer.from(session.token.split(".")[1], "base64url").toString());
+  assert.deepEqual([claims.video.room, claims.video.canSubscribe, claims.sub], [session.room, false, "home-camera-aaaaaaaa"]);
+
+  assert.deepEqual(await cameraSession(store, OTHER_USER_ID, env), { live: false }, "another user's call is not offered");
+  assert.deepEqual(await cameraSession(store, FRESH_USER, { ...env, ALERT_VIDEO: "0" }), { live: false });
+  assert.deepEqual(await cameraSession(store, FRESH_USER, { LIVEKIT_URL: "wss://lk.example" }), { live: false }, "not configured");
+
+  store.data.callAttempts.length = 0;
+  store.data.callAttempts.push(call({ status: "completed" }), call({ about: { kind: "reminder", text: "Meds", at: null, priority: "critical" } }));
+  assert.deepEqual(await cameraSession(store, FRESH_USER, env), { live: false }, "ended calls and reminder calls have no camera");
+});

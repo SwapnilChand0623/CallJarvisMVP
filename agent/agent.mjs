@@ -4,6 +4,7 @@ import { realtime } from '@livekit/agents-plugin-google';
 import { TrackPublishOptions, TrackSource } from '@livekit/rtc-node';
 import { isCritical } from './avatar.mjs';
 import { publishAvatar } from './camera.mjs';
+import { publishFeed } from './feed.mjs';
 import { parseCallContext } from './call-context.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
@@ -43,11 +44,20 @@ const agent = defineAgent({
         console.warn('[jarvis] avatar unavailable:', error instanceof Error ? error.message : String(error));
       }
     }
+    // A critical home alert is a FaceTime Video call: the user sees the live home camera, or the avatar without one.
+    // The track is published before Chert dials.
+    if (call.feed) {
+      try {
+        avatar = await publishFeed(ctx);
+      } catch (error) {
+        console.warn('[jarvis] alert video unavailable:', error instanceof Error ? error.message : String(error));
+      }
+    }
     const identity = call.direction === 'outbound' ? call.bridgeIdentity : (await ctx.waitForParticipant()).identity;
     const loaded = await context;
     // Red when the call is about a critical reminder, or one is overdue; ocean ink otherwise.
     avatar?.setCritical(isCritical(loaded));
-    const instructions = buildInstructions(loaded);
+    const instructions = buildInstructions(loaded, call);
     const tools = loaded ? buildTools(loaded.tools, (action, args) => voiceApi(call, action, args)) : {};
 
     const session = new voice.AgentSession({

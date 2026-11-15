@@ -49,6 +49,18 @@ export function bridgeToken({ apiKey, apiSecret, identity, room, ttlSeconds = 36
   }, apiSecret);
 }
 
+/** Lets the simulator's camera publish video into one call's room. It cannot hear or see the call. */
+export function cameraToken({ apiKey, apiSecret, identity, room, ttlSeconds = 900 }) {
+  const now = Math.floor(Date.now() / 1000);
+  return signJwt({
+    iss: apiKey,
+    sub: identity,
+    nbf: now,
+    exp: now + ttlSeconds,
+    video: { room, roomJoin: true, canPublish: true, canSubscribe: false, canPublishData: false, canPublishSources: ["camera"] },
+  }, apiSecret);
+}
+
 function adminToken(env, room) {
   const now = Math.floor(Date.now() / 1000);
   return signJwt({
@@ -93,6 +105,11 @@ export function participantHasAudio(participant) {
   return Array.isArray(tracks) && tracks.some(trackIsOpenAudio);
 }
 
+/** Video is for critical home alerts only, and can be switched off with ALERT_VIDEO=0. */
+export function wantsVideo(attempt, env = process.env) {
+  return attempt?.video === true && env.ALERT_VIDEO !== "0";
+}
+
 export function createLiveKit(env = process.env, fetchImpl = fetch) {
   const agentName = env.AGENT_NAME || "calljarvis";
   return {
@@ -108,6 +125,8 @@ export function createLiveKit(env = process.env, fetchImpl = fetch) {
         revision: attempt.revision,
         reminderId: attempt.sourceKind === "reminder" ? attempt.sourceId : null,
         channel: "facetime",
+        // A critical home alert is a video call that shows the live home camera.
+        video: wantsVideo(attempt, env),
         greeting: "bridge_ready",
       });
       await twirp(env, fetchImpl, "RoomService", "CreateRoom", { name: room, empty_timeout: 600, metadata });
@@ -120,7 +139,7 @@ export function createLiveKit(env = process.env, fetchImpl = fetch) {
       while (Date.now() < deadline) {
         const listed = await twirp(env, fetchImpl, "RoomService", "ListParticipants", { room });
         const people = listed.participants ?? [];
-        const agent = people.find((person) => !String(person.identity).startsWith("chert-bridge-") && participantHasAudio(person));
+        const agent = people.find((person) => !/^(chert-bridge-|home-camera-)/.test(String(person.identity)) && participantHasAudio(person));
         // Chert subscribes to this exact participant. A dispatched worker joins under a job identity, not its agent name.
         if (agent) return { roomName: room, agentIdentity: agent.identity };
         await new Promise((resolve) => setTimeout(resolve, 300));
@@ -189,20 +208,21 @@ export function createFaceTime(env = process.env, fetchImpl = fetch, tokens) {
       if (!call) return { provenAbsent: true, call: null };
       return { provenAbsent: false, call: { providerId: call.id, status: "accepted" } };
     },
-    async create(attempt, { agentIdentity } = {}) {
+    async create(attempt, { agentIdentity, video = wantsVideo(attempt, env) } = {}) {
       const room = roomNameFor(attempt);
       const token = tokens.bridgeToken(attempt, room);
       const destinationType = String(attempt.destination).includes("@") ? "email" : "phone";
       const { response, body } = await request("/v1/calls", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.idempotencyKey },
+        // The audio retry of a refused video call is a different request, so it carries its own key.
+        headers: { "Content-Type": "application/json", "Idempotency-Key": video === wantsVideo(attempt, env) ? attempt.idempotencyKey : `${attempt.idempotencyKey}:audio` },
         body: JSON.stringify({
           direction: "outbound",
           mode: "customer_managed",
           line_id: env.CHERT_LINE_ID,
           destination: attempt.destination,
           destination_type: destinationType,
-          media: { audio: true, video: false },
+          media: { audio: true, video },
           livekit_url: env.LIVEKIT_URL,
           participant_token: token,
           remote_participant_identity: agentIdentity || tokens.agentName,
