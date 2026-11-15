@@ -130,3 +130,11 @@ and [Chert outbound FaceTime](https://docs.trychert.com/facetime/outbound).
    when outbound access is enabled. If outbound FaceTime is unavailable, show
    the same call-request workflow with an explicit simulation label and report
    which channels ran live.
+
+## Frontend implementation status
+
+The frontend branch supplies Overview, JarvisRemind, JarvisHome, JarvisTalks, and Settings with labeled browser-local fixtures, four reminder priorities, separate acknowledgment, snooze/rescheduling, light simulation, communication rules, and opt-in context/check-ins. Run `npm ci && npm run dev` (Node 22.13+).
+
+`/auth` provides an optional connected reminder workspace against the shared README contract. Configure public Supabase values from `.env.example` only after the backend schema, owner-scoped RLS, and test account are deployed. The connected adapter is implemented but has not been tested against a live project. Other integrations remain explicitly simulated pending backend contracts.
+
+See [frontend handoff](docs/FRONTEND_HANDOFF.md), [demo runbook](docs/demo-runbook.md), and [pitch](docs/PITCH.md). Validate with `npm run lint`, `npm test`, `npm run build -- --webpack`, and `npm run typecheck`.
