@@ -37,7 +37,7 @@ export const ACTIONS: ActionSpec[] = [
   },
   {
     name: "snoozeReminder",
-    description: "Postpone a reminder the user wants to be nudged about again later. Pass exactly one of dueLocal or dueInMinutes.",
+    description: "Postpone a reminder the user wants to be nudged about again later. It keeps its original due time. Pass exactly one of dueLocal or dueInMinutes for when to nudge again.",
     parameters: { type: "object", properties: { reminder: reminderRef, dueLocal, dueInMinutes } },
   },
   {
@@ -73,7 +73,7 @@ export const ACTIONS: ActionSpec[] = [
   {
     name: "scheduleCheckIn",
     description: "Schedule a one-off check-in contact. Only after the user has explicitly asked for or agreed to it. Pass exactly one of dueLocal or dueInMinutes.",
-    parameters: { type: "object", properties: { topic: { type: "string", description: "What to check in about." }, dueLocal, dueInMinutes, userConsented: { type: "boolean", description: "True only if the user said yes to this check-in." } }, required: ["userConsented"] },
+    parameters: { type: "object", properties: { dueLocal, dueInMinutes, userConsented: { type: "boolean", description: "True only if the user said yes to this check-in." } }, required: ["userConsented"] },
   },
 ];
 

@@ -9,10 +9,10 @@ import { bridgeReady, greetOnBridgeReady } from '../greet.mjs';
 test('call context: inbound from chert, outbound from dispatch metadata', () => {
   assert.deepEqual(parseCallContext('{"chert_call":"call_123","media":{"audio":true}}', 'room-a'),
     { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, room: 'room-a' });
-  assert.deepEqual(parseCallContext('{"calljarvis":{"direction":"outbound","attemptId":"a-1","bridgeIdentity":"chert-bridge-a-1"}}', 'r'),
+  assert.deepEqual(parseCallContext('{"outbound":true,"userId":"someone-else","attemptId":"a-1","reminderId":"r-9","greeting":"bridge_ready"}', 'r'),
     { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', room: 'r' });
-  for (const metadata of [undefined, '', 'not json', 'null', '[]', '{"calljarvis":"x"}', '{"calljarvis":{"direction":"outbound"}}',
-    '{"calljarvis":{"direction":"outbound","attemptId":"a b; drop"}}', '{"calljarvis":{"attemptId":"a-1"}}']) {
+  for (const metadata of [undefined, '', 'not json', 'null', '[]', '{"outbound":true}', '{"outbound":"true","attemptId":"a-1"}',
+    '{"outbound":true,"attemptId":"a b; drop"}', '{"attemptId":"a-1"}']) {
     const call = parseCallContext(metadata, undefined);
     assert.deepEqual([call.direction, call.attemptId], ['inbound', null], String(metadata));
   }

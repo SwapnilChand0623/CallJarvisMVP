@@ -1,20 +1,9 @@
 // Supabase store over PostgREST with the service role key. The key bypasses RLS, so every query here carries an
 // explicit owner filter. It uses fetch directly: no client library, and the key never leaves the server.
 //
-// Table and column names follow the README's shared contracts. The names marked "proposed" are not fixed by the
-// README; align them with src/types/database.ts when the database branch (codex/database) merges.
+// Tables and columns follow docs/data-contract.md and the migration on codex/database. Revision bumps, reminder
+// history and cancellation of stale pending attempts are done by database triggers, never from here.
 import type { Attempt, Device, HomeEvent, Memory, Profile, Reminder, ReminderPatch, Store } from "./types";
-
-export const SCHEMA = {
-  profiles: { table: "profiles", id: "id", displayName: "display_name" /* proposed */, timeZone: "time_zone" /* proposed */ },
-  reminders: { table: "reminders" }, // id, user_id, title, due_at, priority, status, acknowledged_at
-  devices: { table: "devices", on: "is_on" /* proposed */ }, // id, user_id, name
-  deviceActions: { table: "device_actions" /* proposed */ }, // user_id, device_id, requested_on, outcome, source, origin
-  homeEvents: { table: "home_events", occurredAt: "occurred_at" /* proposed */ }, // id, user_id, type, severity, description, source
-  attempts: { table: "notification_attempts" }, // id, user_id, reminder_id
-  memories: { table: "memories" /* proposed */ }, // id, user_id, content, created_at
-  checkIns: { table: "check_ins" /* proposed */ }, // id, user_id, due_at, topic
-} as const;
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- untyped until database.ts lands
 
@@ -47,75 +36,82 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
   const reminder = (row: Row): Reminder => ({
     id: row.id, userId: row.user_id, title: row.title, dueAt: new Date(row.due_at).toISOString(),
     priority: row.priority, status: row.status, acknowledgedAt: row.acknowledged_at ?? null,
+    snoozedUntil: row.snoozed_until ? new Date(row.snoozed_until).toISOString() : null,
   });
-  const device = (row: Row): Device => ({ id: row.id, userId: row.user_id, name: row.name, on: row[SCHEMA.devices.on] === true });
+  const device = (row: Row): Device => ({ id: row.id, userId: row.user_id, name: row.name, on: row.is_on === true, simulated: row.source !== "real" });
+  const permittedLights = "kind=eq.light&permitted=is.true";
   const reminderColumns = (patch: ReminderPatch): Row => ({
     ...(patch.title !== undefined && { title: patch.title }),
     ...(patch.dueAt !== undefined && { due_at: patch.dueAt }),
     ...(patch.priority !== undefined && { priority: patch.priority }),
     ...(patch.status !== undefined && { status: patch.status }),
     ...(patch.acknowledgedAt !== undefined && { acknowledged_at: patch.acknowledgedAt }),
+    ...(patch.snoozedUntil !== undefined && { snoozed_until: patch.snoozedUntil }),
   });
 
   return {
     async getProfile(userId) {
-      const p = SCHEMA.profiles;
-      const [row] = await rest("GET", p.table, `${p.id}=${eq(userId)}&limit=1`);
-      return row ? ({ id: row[p.id], displayName: row[p.displayName] ?? null, timeZone: row[p.timeZone] ?? null } satisfies Profile) : null;
+      // profiles has no name column; the dashboard owner can add one without changing this contract.
+      const [row] = await rest("GET", "profiles", `user_id=${eq(userId)}&select=user_id,timezone&limit=1`);
+      return row ? ({ id: row.user_id, displayName: null, timeZone: row.timezone ?? null } satisfies Profile) : null;
     },
     async getAttempt(attemptId) {
-      const [row] = await rest("GET", SCHEMA.attempts.table, `id=${eq(attemptId)}&select=id,user_id,reminder_id&limit=1`);
+      const [row] = await rest("GET", "notification_attempts", `id=${eq(attemptId)}&select=id,user_id,reminder_id&limit=1`);
       return row ? ({ id: row.id, userId: row.user_id, reminderId: row.reminder_id ?? null } satisfies Attempt) : null;
     },
     async listReminders(userId, statuses, limit) {
-      const rows = await rest("GET", SCHEMA.reminders.table,
+      const rows = await rest("GET", "reminders",
         `user_id=${eq(userId)}&status=in.(${statuses.join(",")})&order=due_at.asc&limit=${limit}`);
       return rows.map(reminder);
     },
     async getReminder(userId, id) {
-      const [row] = await rest("GET", SCHEMA.reminders.table, `user_id=${eq(userId)}&id=${eq(id)}&limit=1`);
+      const [row] = await rest("GET", "reminders", `user_id=${eq(userId)}&id=${eq(id)}&limit=1`);
       return row ? reminder(row) : null;
     },
     async insertReminder(userId, input) {
-      const [row] = await rest("POST", SCHEMA.reminders.table, "select=*",
+      const [row] = await rest("POST", "reminders", "select=*",
         { user_id: userId, title: input.title, due_at: input.dueAt, priority: input.priority, status: "pending" });
       if (!row) throw new Error("insert returned no row");
       return reminder(row);
     },
     async updateReminder(userId, id, patch) {
-      const [row] = await rest("PATCH", SCHEMA.reminders.table, `user_id=${eq(userId)}&id=${eq(id)}&select=*`, reminderColumns(patch));
+      const [row] = await rest("PATCH", "reminders", `user_id=${eq(userId)}&id=${eq(id)}&select=*`, reminderColumns(patch));
       return row ? reminder(row) : null;
     },
     async listDevices(userId) {
-      return (await rest("GET", SCHEMA.devices.table, `user_id=${eq(userId)}&order=name.asc&limit=50`)).map(device);
+      return (await rest("GET", "devices", `user_id=${eq(userId)}&${permittedLights}&order=name.asc&limit=50`)).map(device);
     },
     async setDeviceState(userId, deviceId, on) {
-      const [row] = await rest("PATCH", SCHEMA.devices.table, `user_id=${eq(userId)}&id=${eq(deviceId)}&select=*`, { [SCHEMA.devices.on]: on });
+      const [row] = await rest("PATCH", "devices", `user_id=${eq(userId)}&id=${eq(deviceId)}&${permittedLights}&select=*`, { is_on: on });
       return row ? device(row) : null;
     },
     async recordDeviceAction(userId, action) {
-      await rest("POST", SCHEMA.deviceActions.table, "select=id",
-        { user_id: userId, device_id: action.deviceId, requested_on: action.on, outcome: action.outcome, source: action.source, origin: action.origin });
+      await rest("POST", "device_action_logs", "select=id",
+        { user_id: userId, device_id: action.deviceId, requested_on: action.on, status: action.status, confirmed_at: action.status === "failed" ? null : new Date().toISOString() });
     },
     async listHomeEvents(userId, limit) {
-      const when = SCHEMA.homeEvents.occurredAt;
-      const rows = await rest("GET", SCHEMA.homeEvents.table, `user_id=${eq(userId)}&order=${when}.desc&limit=${limit}`);
+      const rows = await rest("GET", "home_events", `user_id=${eq(userId)}&order=occurred_at.desc&limit=${limit}`);
       return rows.map((row): HomeEvent => ({
         id: row.id, type: row.type, severity: row.severity, description: row.description,
-        occurredAt: new Date(row[when]).toISOString(), source: row.source,
+        occurredAt: new Date(row.occurred_at).toISOString(), source: row.source,
       }));
     },
     async listMemories(userId, limit) {
-      const rows = await rest("GET", SCHEMA.memories.table, `user_id=${eq(userId)}&order=created_at.desc&limit=${limit}`);
-      return rows.map((row): Memory => ({ id: row.id, content: row.content, createdAt: row.created_at }));
+      // Voice notes are structured_memory rows keyed "note:<uuid>" with value {"text": …}. Expired rows are never read.
+      const rows = await rest("GET", "structured_memory",
+        `user_id=${eq(userId)}&key=like.note:*&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(`"${new Date().toISOString()}"`)})&order=created_at.desc&limit=${limit}`);
+      return rows.filter((row) => typeof row.value?.text === "string")
+        .map((row): Memory => ({ id: row.id, content: row.value.text, createdAt: row.created_at }));
     },
     async insertMemory(userId, content) {
-      const [row] = await rest("POST", SCHEMA.memories.table, "select=*", { user_id: userId, content });
+      const [row] = await rest("POST", "structured_memory", "select=*",
+        { user_id: userId, key: `note:${crypto.randomUUID()}`, value: { text: content }, approved_at: new Date().toISOString() });
       if (!row) throw new Error("insert returned no row");
-      return { id: row.id, content: row.content, createdAt: row.created_at };
+      return { id: row.id, content, createdAt: row.created_at };
     },
     async insertCheckIn(userId, input) {
-      const [row] = await rest("POST", SCHEMA.checkIns.table, "select=id", { user_id: userId, due_at: input.dueAt, topic: input.topic });
+      const [row] = await rest("POST", "check_ins", "select=id",
+        { user_id: userId, due_at: input.dueAt, enabled: true, consented_at: new Date().toISOString() });
       if (!row) throw new Error("insert returned no row");
       return { id: row.id };
     },

@@ -48,7 +48,7 @@ const done = await run(second, 'completeReminder', { reminder: created.reminder.
 console.log('done   ->', done.status, done.reminder.status);
 
 // Call 3 (outbound about the medication reminder): acknowledge with no argument.
-const third = await open('{"calljarvis":{"direction":"outbound","attemptId":"40000000-0000-4000-8000-000000000001"}}');
+const third = await open('{"outbound":true,"attemptId":"40000000-0000-4000-8000-000000000001"}');
 console.log('greeting:', buildGreeting(third.context, third.call).slice(0, 110), '…');
 const ack = await run(third, 'acknowledgeReminder', {});
 console.log('ack    ->', ack.status, ack.reminder.title, 'status:', ack.reminder.status, 'acknowledged:', ack.reminder.acknowledged);
@@ -60,6 +60,6 @@ assert.equal(rows.find(r => r.title === 'Renew passport').acknowledgedAt, null);
 // Wrong token and unknown attempt.
 const bad = createVoiceApi({ url: `http://127.0.0.1:${server.address().port}`, token: 'nope' });
 console.log('wrong token ->', (await bad(first.call, 'listReminders')).error.code);
-console.log('forged attempt ->', (await api(parseCallContext('{"calljarvis":{"direction":"outbound","attemptId":"forged"}}'), 'session.start')).error.code);
+console.log('forged attempt ->', (await api(parseCallContext('{"outbound":true,"attemptId":"forged"}'), 'session.start')).error.code);
 server.close();
 console.log('E2E OK');

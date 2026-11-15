@@ -7,18 +7,18 @@ export const OTHER_USER_ID = "00000000-0000-4000-8000-000000000002";
 export type MemoryData = {
   profiles: Profile[];
   reminders: Reminder[];
-  devices: Device[];
   homeEvents: (HomeEvent & { userId: string })[];
   memories: (Memory & { userId: string })[];
-  checkIns: { id: string; userId: string; dueAt: string; topic: string | null }[];
-  deviceActions: { userId: string; deviceId: string; on: boolean; outcome: string; source: string; origin: string }[];
+  checkIns: { id: string; userId: string; dueAt: string; enabled: boolean; consentedAt: string }[];
+  devices: (Device & { permitted: boolean })[];
+  deviceActions: { userId: string; deviceId: string; on: boolean; status: string }[];
   attempts: Attempt[];
 };
 
 export function demoData(now = new Date()): MemoryData {
   const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISOString();
   const reminder = (id: string, userId: string, title: string, minutes: number, priority: Reminder["priority"]): Reminder =>
-    ({ id, userId, title, dueAt: at(minutes), priority, status: "pending", acknowledgedAt: null });
+    ({ id, userId, title, dueAt: at(minutes), priority, status: "pending", acknowledgedAt: null, snoozedUntil: null });
   return {
     profiles: [
       { id: DEMO_USER_ID, displayName: "Demo User", timeZone: "America/Chicago" },
@@ -30,8 +30,9 @@ export function demoData(now = new Date()): MemoryData {
       reminder("10000000-0000-4000-8000-000000000003", OTHER_USER_ID, "Renew passport", 60, "medium"),
     ],
     devices: [
-      { id: "20000000-0000-4000-8000-000000000001", userId: DEMO_USER_ID, name: "Living room lamp", on: false },
-      { id: "20000000-0000-4000-8000-000000000002", userId: OTHER_USER_ID, name: "Porch light", on: false },
+      { id: "20000000-0000-4000-8000-000000000001", userId: DEMO_USER_ID, name: "Living room lamp", on: false, simulated: true, permitted: true },
+      { id: "20000000-0000-4000-8000-000000000002", userId: OTHER_USER_ID, name: "Porch light", on: false, simulated: true, permitted: true },
+      { id: "20000000-0000-4000-8000-000000000003", userId: DEMO_USER_ID, name: "Garage light", on: false, simulated: true, permitted: false },
     ],
     homeEvents: [{
       id: "30000000-0000-4000-8000-000000000001", userId: DEMO_USER_ID, type: "motion", severity: "info",
@@ -55,22 +56,28 @@ export function memoryStore(data: MemoryData = demoData()): Store & { data: Memo
     },
     async getReminder(userId, id) { return copy(data.reminders.find((row) => row.userId === userId && row.id === id) ?? null); },
     async insertReminder(userId, input) {
-      const row: Reminder = { id: crypto.randomUUID(), userId, ...input, status: "pending", acknowledgedAt: null };
+      const row: Reminder = { id: crypto.randomUUID(), userId, ...input, status: "pending", acknowledgedAt: null, snoozedUntil: null };
       data.reminders.push(row);
       return copy(row);
     },
     async updateReminder(userId, id, patch) {
       const row = data.reminders.find((item) => item.userId === userId && item.id === id);
       if (!row) return null;
-      Object.assign(row, patch);
+      const next = { ...row, ...patch };
+      // Same rule as the database check constraint on reminders.
+      if ((next.status === "snoozed") !== (next.snoozedUntil !== null)) throw new Error("snoozed_until must be set exactly when status is snoozed");
+      Object.assign(row, next);
       return copy(row);
     },
-    async listDevices(userId) { return copy(data.devices.filter((row) => row.userId === userId)); },
+    async listDevices(userId) {
+      return data.devices.filter((row) => row.userId === userId && row.permitted)
+        .map((row): Device => ({ id: row.id, userId: row.userId, name: row.name, on: row.on, simulated: row.simulated }));
+    },
     async setDeviceState(userId, deviceId, on) {
-      const row = data.devices.find((item) => item.userId === userId && item.id === deviceId);
+      const row = data.devices.find((item) => item.userId === userId && item.id === deviceId && item.permitted);
       if (!row) return null;
       row.on = on;
-      return copy(row);
+      return { id: row.id, userId: row.userId, name: row.name, on: row.on, simulated: row.simulated };
     },
     async recordDeviceAction(userId, action) { data.deviceActions.push({ userId, ...action }); },
     async listHomeEvents(userId, limit) {
@@ -88,7 +95,7 @@ export function memoryStore(data: MemoryData = demoData()): Store & { data: Memo
       return { id: row.id, content, createdAt: row.createdAt };
     },
     async insertCheckIn(userId, input) {
-      const row = { id: crypto.randomUUID(), userId, ...input };
+      const row = { id: crypto.randomUUID(), userId, ...input, enabled: true, consentedAt: new Date().toISOString() };
       data.checkIns.push(row);
       return { id: row.id };
     },

@@ -8,13 +8,15 @@ export type Reminder = {
   userId: string;
   title: string;
   dueAt: string; // UTC ISO timestamp
+  /** Set exactly when status is "snoozed": the time outreach resumes. dueAt keeps the original time. */
+  snoozedUntil: string | null;
   priority: Priority;
   status: ReminderStatus;
   acknowledgedAt: string | null;
 };
 
 export type Profile = { id: string; displayName: string | null; timeZone: string | null };
-export type Device = { id: string; userId: string; name: string; on: boolean };
+export type Device = { id: string; userId: string; name: string; on: boolean; simulated: boolean };
 export type HomeEvent = {
   id: string;
   type: string;
@@ -26,7 +28,7 @@ export type HomeEvent = {
 export type Memory = { id: string; content: string; createdAt: string };
 export type Attempt = { id: string; userId: string; reminderId: string | null };
 
-export type ReminderPatch = Partial<Pick<Reminder, "title" | "dueAt" | "priority" | "status" | "acknowledgedAt">>;
+export type ReminderPatch = Partial<Pick<Reminder, "title" | "dueAt" | "priority" | "status" | "acknowledgedAt" | "snoozedUntil">>;
 
 /** Every method is scoped to one owner. Implementations must filter by userId on reads and writes. */
 export type Store = {
@@ -37,13 +39,15 @@ export type Store = {
   insertReminder(userId: string, input: Pick<Reminder, "title" | "dueAt" | "priority">): Promise<Reminder>;
   /** Returns null when the reminder does not exist for this owner. */
   updateReminder(userId: string, id: string, patch: ReminderPatch): Promise<Reminder | null>;
+  /** Only lights the owner has permitted. */
   listDevices(userId: string): Promise<Device[]>;
   setDeviceState(userId: string, deviceId: string, on: boolean): Promise<Device | null>;
-  recordDeviceAction(userId: string, action: { deviceId: string; on: boolean; outcome: "succeeded" | "failed"; source: string; origin: string }): Promise<void>;
+  recordDeviceAction(userId: string, action: { deviceId: string; on: boolean; status: "succeeded" | "failed" | "simulated" }): Promise<void>;
   listHomeEvents(userId: string, limit: number): Promise<HomeEvent[]>;
   listMemories(userId: string, limit: number): Promise<Memory[]>;
   insertMemory(userId: string, content: string): Promise<Memory>;
-  insertCheckIn(userId: string, input: { dueAt: string; topic: string | null }): Promise<{ id: string }>;
+  /** A one-off, enabled check-in with consent recorded now. */
+  insertCheckIn(userId: string, input: { dueAt: string }): Promise<{ id: string }>;
 };
 
 /** The device boundary owned by Shishir's Codex (src/lib/server/home). The action reports only what this returns. */
@@ -60,7 +64,7 @@ export type Actor = {
   displayName: string | null;
   /** Reminder the call or message is about, from the notification attempt. */
   focusReminderId: string | null;
-  /** "voice" or "imessage": recorded on device audit rows. */
+  /** "voice" or "imessage". */
   origin: string;
 };
 

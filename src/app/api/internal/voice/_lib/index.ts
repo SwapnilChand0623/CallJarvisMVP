@@ -5,4 +5,5 @@ export { ACTIONS, ACTION_NAMES } from "./contract";
 export type { ActionSpec } from "./contract";
 export { resolveActor, createVoiceHandler } from "./handler";
 export { voiceConfig } from "./config";
+export { handleMessage, parseMessage } from "./message";
 export type { ActionResult, Actor, Deps, HomeService, Store } from "./types";

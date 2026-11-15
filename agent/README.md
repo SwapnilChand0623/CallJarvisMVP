@@ -59,12 +59,13 @@ call, Jarvis still talks but has no tools and says it cannot save anything.
 Run `npm test` for the worker's unit tests and `npm run test:e2e` to drive the
 worker's tools against the endpoint with fixture data. Neither needs keys.
 
-For a proactive call, the backend dispatches this agent with the metadata
-`{"calljarvis":{"direction":"outbound","attemptId":"…","bridgeIdentity":"…"}}`.
-The worker then opens its session at once, so its audio track is published
-before Chert dials, and stays silent. It greets when the backend writes
-`{"chert_bridge_ready":true}` into the room metadata, the same signal `chert dev`
-gives inbound calls.
+For a proactive call, the outreach service dispatches this agent with the
+metadata `{"outbound":true,"attemptId":"…",…}`. The worker then opens its
+session at once, so its audio track is published before Chert dials, and stays
+silent. It listens to the bridge participant `chert-bridge-<attempt id>` and
+greets when the outreach service writes `{"chert_bridge_ready":true}` into the
+room metadata, the same signal `chert dev` gives inbound calls. It sends the
+server only the attempt ID; the user and reminder are looked up from it.
 
 ## Change it
 

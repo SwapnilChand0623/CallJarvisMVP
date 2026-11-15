@@ -3,10 +3,12 @@
 //
 //   { "action": "session.start", "call": { "callId": "…", "attemptId": "…" } }
 //   { "action": "createReminder", "args": { … }, "call": { … } }
+//   { "action": "inboundMessage", "args": { "text": "snooze 30 min" }, "call": { "attemptId": "…" } }   (iMessage webhook)
 //
 // 200 { ok: true, result } · 422 { ok: false, error } for a refused action · 400/401/403/503 for request problems.
 import { buildContext, runAction } from "./actions";
 import { ACTIONS } from "./contract";
+import { handleMessage } from "./message";
 import { validTimeZone } from "./time";
 import type { Actor, Deps, Store } from "./types";
 
@@ -86,6 +88,13 @@ export function createVoiceHandler(config: VoiceConfig) {
         console.error("[voice] context lookup failed", error instanceof Error ? error.message : error);
         return fail(503, "store_unavailable", "The user's context could not be loaded.");
       }
+    }
+    if (body.action === "inboundMessage") {
+      // A message must reply to an outreach attempt: text never falls back to the demo caller.
+      const call = body.call as Record<string, unknown> | null | undefined;
+      if (!call || call.attemptId === undefined || call.attemptId === null) return fail(403, "caller_not_verified", "A message needs the attempt it replies to.");
+      const args = body.args && typeof body.args === "object" ? (body.args as Record<string, unknown>) : {};
+      return Response.json({ ok: true, result: await handleMessage(config.deps, actor, args.text) });
     }
     const outcome = await runAction(config.deps, actor, body.action, body.args);
     return Response.json(outcome, { status: outcome.ok ? 200 : outcome.error.code === "write_failed" ? 502 : 422 });

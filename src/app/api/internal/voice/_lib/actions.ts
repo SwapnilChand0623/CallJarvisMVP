@@ -20,8 +20,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
+/** When outreach is next due: the snooze time while snoozed, otherwise the due time. */
+const effectiveDue = (reminder: Reminder) => new Date(reminder.status === "snoozed" && reminder.snoozedUntil ? reminder.snoozedUntil : reminder.dueAt);
+
 function view(reminder: Reminder, actor: Actor, now: Date) {
-  const due = new Date(reminder.dueAt);
+  const due = effectiveDue(reminder);
   return {
     id: reminder.id,
     title: reminder.title,
@@ -53,7 +56,7 @@ async function findReminder(deps: Deps, actor: Actor, reference: unknown): Promi
   if (matches.length === 1) return matches[0];
   if (matches.length === 0) return new Failure("reminder_not_found", `No open reminder matches "${wanted}". Offer to list the open reminders.`);
   return new Failure("reminder_ambiguous", "More than one reminder matches. Ask the user which one, then pass its id.",
-    matches.slice(0, 5).map((item) => ({ id: item.id, title: item.title, due: toSpoken(new Date(item.dueAt), actor.timeZone) })));
+    matches.slice(0, 5).map((item) => ({ id: item.id, title: item.title, due: toSpoken(effectiveDue(item), actor.timeZone) })));
 }
 
 async function change(deps: Deps, actor: Actor, now: Date, reminder: Reminder, patch: ReminderPatch) {
@@ -71,9 +74,9 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     const rows = await deps.store.listReminders(actor.userId, filter === "completed" ? ["completed"] : OPEN, 100);
     const today = toLocal(now, actor.timeZone).slice(0, 10);
     const kept = rows.filter((item) =>
-      filter === "overdue" ? Date.parse(item.dueAt) < now.getTime() :
-      filter === "today" ? toLocal(new Date(item.dueAt), actor.timeZone).slice(0, 10) === today : true);
-    kept.sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+      filter === "overdue" ? effectiveDue(item).getTime() < now.getTime() :
+      filter === "today" ? toLocal(effectiveDue(item), actor.timeZone).slice(0, 10) === today : true);
+    kept.sort((a, b) => effectiveDue(a).getTime() - effectiveDue(b).getTime());
     return { filter, total: kept.length, reminders: kept.slice(0, 10).map((item) => view(item, actor, now)) };
   },
 
@@ -105,7 +108,7 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
       const due = resolveDue(args, actor.timeZone, now);
       if (!due.ok) return new Failure(due.code, due.message);
       // A new time is a new commitment: it becomes pending again and may notify again.
-      Object.assign(patch, { dueAt: due.at.toISOString(), status: "pending", acknowledgedAt: null });
+      Object.assign(patch, { dueAt: due.at.toISOString(), status: "pending", snoozedUntil: null, acknowledgedAt: null });
     }
     if (Object.keys(patch).length === 0) return new Failure("invalid_arguments", "Nothing to change. Pass a title, priority or new time.");
     if (reminder.status === "canceled" || (reminder.status === "completed" && !patch.dueAt)) return closed(reminder)!;
@@ -117,7 +120,7 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     if (reminder instanceof Failure) return reminder;
     const due = resolveDue(args, actor.timeZone, now);
     if (!due.ok) return new Failure(due.code, due.message);
-    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "snoozed", dueAt: due.at.toISOString(), acknowledgedAt: null });
+    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "snoozed", snoozedUntil: due.at.toISOString(), acknowledgedAt: null });
   },
 
   async acknowledgeReminder(deps, actor, args, now) {
@@ -131,7 +134,7 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     const reminder = await findReminder(deps, actor, args.reminder);
     if (reminder instanceof Failure) return reminder;
     if (reminder.status === "completed") return { reminder: view(reminder, actor, now), alreadyCompleted: true };
-    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "completed" });
+    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "completed", snoozedUntil: null });
   },
 
   async cancelReminder(deps, actor, args, now) {
@@ -139,7 +142,7 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     if (!text(args.reminder, 200)) return new Failure("reminder_required", "Ask which reminder to cancel, then pass its id or title.");
     const reminder = await findReminder(deps, actor, args.reminder);
     if (reminder instanceof Failure) return reminder;
-    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "canceled" });
+    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "canceled", snoozedUntil: null });
   },
 
   async getHomeStatus(deps, actor) {
@@ -180,7 +183,7 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     if (args.userConsented !== true) return new Failure("consent_required", "Nothing was scheduled. Ask the user whether they want this check-in, and only call again after a yes.");
     const due = resolveDue(args, actor.timeZone, now);
     if (!due.ok) return new Failure(due.code, due.message);
-    const saved = await deps.store.insertCheckIn(actor.userId, { dueAt: due.at.toISOString(), topic: text(args.topic, 200) || null });
+    const saved = await deps.store.insertCheckIn(actor.userId, { dueAt: due.at.toISOString() });
     return { checkIn: { id: saved.id, due: toSpoken(due.at, actor.timeZone) } };
   },
 };
@@ -208,7 +211,7 @@ export async function buildContext(deps: Deps, actor: Actor) {
     deps.store.listReminders(actor.userId, OPEN, 100),
     deps.store.listMemories(actor.userId, 10),
   ]);
-  open.sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+  open.sort((a, b) => effectiveDue(a).getTime() - effectiveDue(b).getTime());
   const focus = actor.focusReminderId ? await deps.store.getReminder(actor.userId, actor.focusReminderId) : null;
   return {
     user: { name: actor.displayName, timeZone: actor.timeZone },
