@@ -22,14 +22,19 @@ export function Brand() {
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const { user, client, loading, phone, error } = useAccount();
+  const { user, client, loading, phone, verified, error } = useAccount();
   const publicPage = path === "/auth";
   const phonePage = path === "/onboarding/phone";
   const destination =
-    !client || !user ? "/auth" : !phone ? "/onboarding/phone" : "/";
+    !client || !user
+      ? "/auth"
+      : !phone || !verified
+        ? "/onboarding/phone"
+        : "/";
   useEffect(() => {
     if (loading || publicPage || error) return;
-    if (!client || !user || (!phone && !phonePage)) router.replace(destination);
+    if (!client || !user || ((!phone || !verified) && !phonePage))
+      router.replace(destination);
   }, [
     loading,
     publicPage,
@@ -37,13 +42,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     client,
     user,
     phone,
+    verified,
     phonePage,
     router,
     destination,
   ]);
   if (publicPage || (phonePage && user && !loading))
     return <main className="entry-screen">{children}</main>;
-  if (loading || !user || !phone)
+  if (loading || !user || !phone || !verified)
     return (
       <main className="entry-screen">
         <div className="entry-message" role="status">

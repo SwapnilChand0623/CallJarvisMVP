@@ -1,33 +1,82 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import type { User, SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase/client";
+
+type Profile = {
+  owner: string;
+  phone: string;
+  verified: boolean;
+  callingEnabled: boolean;
+  error: string;
+};
 type Account = {
   client: ReturnType<typeof getSupabaseClient>;
   user: User | null;
   loading: boolean;
   phone: string;
   verified: boolean;
+  callingEnabled: boolean;
   error: string;
+  refreshProfile: () => Promise<void>;
 };
 const Context = createContext<Account | null>(null);
+
+async function readProfile(
+  client: SupabaseClient,
+  owner: string,
+): Promise<Profile> {
+  const [profileResult, ruleResult] = await Promise.all([
+    client
+      .from("profiles")
+      .select("destination,verified_at,outreach_enabled,opted_in_channels")
+      .eq("user_id", owner)
+      .abortSignal(AbortSignal.timeout(12000))
+      .maybeSingle(),
+    client
+      .from("communication_rules")
+      .select("critical_channel")
+      .eq("user_id", owner)
+      .abortSignal(AbortSignal.timeout(12000))
+      .maybeSingle(),
+  ]);
+  const { data, error } = profileResult;
+  if (error || ruleResult.error || !data)
+    throw new Error(
+      "We couldn’t load your phone settings. Please reload to try again.",
+    );
+  return {
+    owner,
+    phone: data.destination ?? "",
+    verified: !!data.verified_at,
+    callingEnabled:
+      !!data.verified_at &&
+      !!data.destination &&
+      data.outreach_enabled === true &&
+      data.opted_in_channels?.includes("facetime") === true &&
+      ruleResult.data?.critical_channel === "facetime",
+    error: "",
+  };
+}
+
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [client] = useState(getSupabaseClient);
   const [user, setUser] = useState<User | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [profile, setProfile] = useState<{
-    owner: string;
-    phone: string;
-    verified: boolean;
-    error: string;
-  } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   useEffect(() => {
     if (!client) return;
     let alive = true;
     let changed = false;
     const { data } = client.auth.onAuthStateChange((_event, session) => {
       changed = true;
-      // Defer downstream profile queries until Supabase releases its auth lock.
+      // Defer downstream queries until Supabase releases its auth lock.
       setTimeout(() => {
         if (alive) {
           setUser(session?.user ?? null);
@@ -50,22 +99,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!client || !owner) return;
     let alive = true;
-    void Promise.resolve(client
-      .from("profiles")
-      .select("destination,verified_at")
-      .eq("user_id", owner)
-      .abortSignal(AbortSignal.timeout(12000))
-      .maybeSingle())
-      .then(({ data, error }) => {
-        if (alive)
-          setProfile({
-            owner,
-            phone: data?.destination ?? "",
-            verified: !!data?.verified_at,
-            error: error
-              ? "We couldn’t load your phone settings. Please reload to try again."
-              : "",
-          });
+    void readProfile(client, owner)
+      .then((value) => {
+        if (alive) setProfile(value);
       })
       .catch(() => {
         if (alive)
@@ -73,6 +109,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             owner,
             phone: "",
             verified: false,
+            callingEnabled: false,
             error:
               "We couldn’t load your phone settings. Please reload to try again.",
           });
@@ -81,22 +118,23 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, [client, owner]);
+  const refreshProfile = useCallback(async () => {
+    if (!client || !owner) throw new Error("Sign in to finish phone setup.");
+    const value = await readProfile(client, owner);
+    setProfile(value);
+  }, [client, owner]);
   const current = profile?.owner === owner ? profile : null;
-  // Editable metadata is a contact request, never evidence of ownership or send authorization.
-  const requested =
-    typeof user?.user_metadata?.contact_phone === "string"
-      ? user.user_metadata.contact_phone
-      : "";
   return (
     <Context.Provider
       value={{
         client,
         user,
         loading: !!client && (!sessionReady || (!!user && !current)),
-        phone: requested || current?.phone || "",
-        verified:
-          !!current?.verified && (!requested || requested === current.phone),
+        phone: current?.phone ?? "",
+        verified: current?.verified ?? false,
+        callingEnabled: current?.callingEnabled ?? false,
         error: current?.error ?? "",
+        refreshProfile,
       }}
     >
       {children}

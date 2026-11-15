@@ -7,7 +7,14 @@ import { Brand } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/components/account-provider";
 export default function Auth() {
-  const { client, user, loading, phone, error: accountError } = useAccount();
+  const {
+    client,
+    user,
+    loading,
+    phone,
+    verified,
+    error: accountError,
+  } = useAccount();
   const router = useRouter();
   const [signup, setSignup] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -15,8 +22,8 @@ export default function Auth() {
   const [checkEmail, setCheckEmail] = useState(false);
   useEffect(() => {
     if (!loading && user && !accountError)
-      router.replace(phone ? "/" : "/onboarding/phone");
-  }, [loading, user, phone, accountError, router]);
+      router.replace(phone && verified ? "/" : "/onboarding/phone");
+  }, [loading, user, phone, verified, accountError, router]);
   return (
     <div className="welcome-layout">
       <section className="welcome-story">

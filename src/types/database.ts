@@ -589,6 +589,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      complete_phone_onboarding: {
+        Args: { p_phone: string; p_timezone: string; p_consent: boolean }
+        Returns: Json
+      }
       begin_notification_delivery: {
         Args: { p_attempt_id: string }
         Returns: Json

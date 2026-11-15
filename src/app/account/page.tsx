@@ -6,7 +6,15 @@ import { ArrowRight, LogOut, Phone, Mail } from "lucide-react";
 import { useAccount } from "@/components/account-provider";
 import { Button } from "@/components/ui/button";
 export default function Account() {
-  const { client, user, phone, verified, error: profileError } = useAccount();
+  const {
+    client,
+    user,
+    phone,
+    verified,
+    callingEnabled,
+    error: profileError,
+    refreshProfile,
+  } = useAccount();
   const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,12 +42,15 @@ export default function Account() {
             <strong>{phone || "Not added yet"}</strong>
             <p>
               {verified
-                ? "Phone verified. Call availability depends on your line and permissions."
-                : "Saved for setup. Calls and messages aren’t enabled by adding a number."}
+                ? callingEnabled
+                  ? "Verified. Critical reminder calls are enabled."
+                  : "Verified. Reminder calls are currently off."
+                : "Finish verification to enable critical reminder calls."}
             </p>
           </div>
           <Link className="text-link" href="/onboarding/phone">
-            Change <ArrowRight size={14} />
+            {callingEnabled ? "Change" : "Set up calls"}{" "}
+            <ArrowRight size={14} />
           </Link>
         </div>
       </section>
@@ -52,21 +63,54 @@ export default function Account() {
           {error || profileError}
         </p>
       )}
-      <Button
-        variant="outline"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          const result = await client?.auth.signOut();
-          if (result?.error) {
-            setError(result.error.message);
-            setBusy(false);
-          } else router.replace("/auth");
-        }}
-      >
-        <LogOut size={16} />
-        {busy ? "Signing out…" : "Sign out"}
-      </Button>
+      <div className="account-actions">
+        {callingEnabled && (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={async () => {
+              if (!client || !user) return;
+              setBusy(true);
+              setError("");
+              try {
+                const { data, error } = await client
+                  .from("profiles")
+                  .update({ outreach_enabled: false })
+                  .eq("user_id", user.id)
+                  .select("outreach_enabled")
+                  .single();
+                if (error) throw error;
+                if (data?.outreach_enabled !== false)
+                  throw new Error("We couldn’t pause calls. Please try again.");
+                await refreshProfile();
+              } catch (err) {
+                setError(
+                  err instanceof Error ? err.message : "Please try again.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Pause reminder calls
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const result = await client?.auth.signOut();
+            if (result?.error) {
+              setError(result.error.message);
+              setBusy(false);
+            } else router.replace("/auth");
+          }}
+        >
+          <LogOut size={16} />
+          {busy ? "Signing out…" : "Sign out"}
+        </Button>
+      </div>
     </div>
   );
 }

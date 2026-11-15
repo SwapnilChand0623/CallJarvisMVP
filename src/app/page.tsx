@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 import { loadReminders } from "@/lib/supabase/reminders";
 import type { Reminder } from "@/lib/mockData";
 export default function Home() {
-  const { client, user, verified, error: accountError } = useAccount();
+  const {
+    client,
+    user,
+    verified,
+    callingEnabled,
+    error: accountError,
+  } = useAccount();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -136,12 +142,14 @@ export default function Home() {
           <span className="call-speech">“What do I have coming up?”</span>
         </div>
       </section>
-      {(!verified || accountError) && (
+      {(!verified || !callingEnabled || accountError) && (
         <div className="phone-status">
           <span className="status-dot" />
           <p>
             {accountError ||
-              "Your number is saved. Calling access still needs verification."}
+              (verified
+                ? "Reminder calls are off. Enable them in Account."
+                : "Finish verifying your number to enable reminder calls.")}
           </p>
           <Link href="/account">
             View account <ArrowRight size={14} />

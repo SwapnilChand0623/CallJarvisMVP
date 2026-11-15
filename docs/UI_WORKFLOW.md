@@ -1,25 +1,34 @@
-# Account and reminder UI
+# Account and reminder workflow
 
-The primary flow is `/auth` → `/onboarding/phone` → `/`. Returning users with a saved phone go straight home. An existing server-provisioned `profiles.destination` also satisfies phone setup. The navigation contains Home, Reminders, and Account. Home reads the signed-in account’s Supabase reminders; demo fixtures are not uploaded or shown as account records.
+The primary flow is `/auth` → `/onboarding/phone` → `/`. Phone setup now verifies the existing signed-in account’s phone, asks for calling consent, and writes the same database records the scheduler reads. Returning users with a verified profile phone go straight home. Home and Account derive calling status from `profiles` and `communication_rules`, never editable sign-in metadata.
 
-## Configuration
+## Deploy the connected flow
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for sign-in. Allow the deployed `/auth` URL in Supabase Auth’s redirect allow list so email confirmation returns to the application. With confirmation enabled, signup displays a check-your-inbox screen and phone setup starts after sign-in.
+1. Apply `supabase/migrations/20261115120000_verified_phone_onboarding.sql` with the normal database migration deployment. This must precede deploying the UI. The migration adds `complete_phone_onboarding`; it requires no application service-role key.
+2. In the hosted Supabase Auth settings, enable the Phone provider, require phone confirmation, and configure an SMS provider. Email/password signup remains the UI entry point. SMS credentials stay in Supabase. The repository’s local `auth.sms` configuration requires confirmation; configure a local SMS provider or use Supabase’s local test-phone support for development. Do not disable confirmations to bypass setup.
+3. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Allow the deployed `/auth` URL in Auth’s redirect allow list for email confirmation.
+4. Set `NEXT_PUBLIC_CHERT_PHONE_NUMBER` to the public Chert line before building. A missing/invalid number shows “Number coming soon” without a dial action. This setting does not provision or activate a provider line.
+5. Ensure the existing scheduler, outreach server, voice worker, and Chert line are configured. Chert plan restrictions and allowed/verified destinations still apply; Supabase SMS ownership verification does not register a destination with Chert. No provider provisioning or inbound multi-account routing is changed by this PR.
 
-Set `NEXT_PUBLIC_CHERT_PHONE_NUMBER` to the real public Chert number, with country code, before building. Home displays the configured number with a FaceTime Audio link and copy action. Missing or invalid configuration displays “Number coming soon” without a dial action. This public display setting does not provision a line or assert provider readiness.
+Supabase’s phone-change flow is documented at https://supabase.com/docs/guides/auth/phone-login#updating-a-phone-number.
 
-## Phone handoff
+## Verification and scheduler handoff
 
-Phone setup accepts international numbers, strips formatting, and saves `contact_phone` using Supabase Auth’s `updateUser({ data })`. It is a contact request, not verification. Changing a number does not update `profiles.destination`, `verified_at`, outreach permissions, or the caller’s identity. The account and homepage label an unverified request accordingly.
-
-The backend workstream must verify ownership and consent before promoting a requested number into the server-owned profile and registering Chert access. Do not trust editable Auth metadata as evidence of verification. This UI change does not remove the existing single-account inbound voice limitation.
+- `auth.updateUser({ phone })` sends a phone-change code on the signed-in account. `verifyOtp` uses `phone_change`, not a separate phone signup. Existing confirmed Auth phones can finish setup without requesting a redundant code.
+- After verification and explicit consent, the authenticated `complete_phone_onboarding` RPC checks `auth.uid()` and the actual `auth.users.phone` / `phone_confirmed_at` under a row lock. Neither a client-selected user ID nor metadata can provide verification.
+- One transaction sets `profiles.destination`, `verified_at`, the browser time zone, `outreach_enabled=true`, and FaceTime opt-in. It sets `communication_rules.critical_channel='facetime'`, preserving the call cap, quiet hours, escalation delays, and existing channel choices. These are the exact records used by candidate selection and send authorization.
+- The UI refetches those records before navigating home. If the database save fails after a valid code, “Finish setup” retries the save without requesting another code. Provider/code errors remain on the verification screen.
+- Account’s “Pause reminder calls” action updates `profiles.outreach_enabled`, immediately suppressing new scheduler delivery. Re-enabling requires calling consent again; an already confirmed Auth phone does not need another code.
+- Critical reminders follow the existing FaceTime policy. Other priorities retain their existing messaging/escalation behavior; signup does not make every reminder a phone call.
+- Old `contact_phone` metadata is used only as an input prefill for migration. It never completes onboarding or enables outreach. Server-provisioned verified profile phones remain supported.
 
 ## Validation
 
-- ESLint, TypeScript, production webpack build, and 14 unit tests.
-- Local browser fixture: signup routing, phone validation/save, homepage empty/populated states, reminder creation/snooze, account details, sign-out, returning-user sign-in, email confirmation, and the configured/unconfigured call card.
-- Local fixture requests do not create hosted accounts, modify the hosted database, or send calls/messages. Hosted email delivery, phone verification, and real Chert calls remain integration checks.
+- ESLint, TypeScript, production webpack build, and 21 unit tests.
+- `supabase/tests/phone-onboarding.sql`: transactional tests against a test database. Covers anonymous access, forged metadata, unconfirmed or mismatched phones, consent, time zone validation, another account’s isolation, repeat completion, rollback when rule saving fails, and actual scheduler candidate → claim → send authorization resolving to the newly verified destination. No provider is contacted.
+- The migration and SQL checks were run locally in PostgreSQL via PGlite with an Auth-compatible fixture, including all repository migrations. They have not been applied to the hosted project by this UI task.
+- Browser checks use simulated Auth/SMS and the real migration/RPC in the local database. Hosted SMS delivery and live Chert calls require deployment and configured providers.
 
 ## Visual theme
 
-`src/app/theme.css` defines the navy/cyan palette across account onboarding and reminders. The supplied CallJarvis logo is preserved in `public/brand/calljarvis-logo.png`; CSS clips its surrounding whitespace when displayed. `JarvisCore` provides decorative, screen-reader-hidden rings with CSS transforms, without an animation dependency. Page reveals last 360–420 ms, controls transition in 160 ms, and the two ambient ring layers turn slowly. Reduced-motion preferences disable animations and transitions. Compact screens omit the large sign-in illustration and use a small, subdued ring on the call card.
+`src/app/theme.css` defines the navy/cyan palette. The supplied logo is preserved in `public/brand/calljarvis-logo.png`; CSS clips surrounding whitespace. `JarvisCore` supplies decorative, screen-reader-hidden rings using two slow CSS transform animations. Page reveals and control feedback are brief. Reduced-motion preferences disable motion; compact screens reduce the artwork.
