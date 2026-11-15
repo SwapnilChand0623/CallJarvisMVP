@@ -495,3 +495,35 @@ test("Supabase outreach uses deployed columns and simulates only after atomic au
   assert.equal((await deliver(row.id)).body.outcome, "simulated");
   assert.equal(writes, 1);
 });
+
+test("a verified sender with no outreach history can get one text reply", async () => {
+  const store = createMemoryStore({
+    profiles: [{ userId: "user-1", destination: "+15551230000", channels: ["imessage"] }],
+  });
+  const commands = [];
+  const replies = [];
+  const webhook = createIMessageWebhook({
+    store,
+    secret: "msg-secret",
+    async handleVerifiedText(command) {
+      commands.push(command);
+      return "You have no open reminders.";
+    },
+    async sendReply(destination, key, body) {
+      replies.push({ destination, key, body });
+      return { kind: "accepted" };
+    },
+  });
+  const event = messageEvent("evt-first", "+15551230000", "What reminders do I have?");
+  assert.deepEqual(await (await webhook(signedMessage(event))).json(), {
+    forwarded: true, replyStatus: "accepted",
+  });
+  assert.deepEqual(await (await webhook(signedMessage(event))).json(), { duplicate: true });
+  const stranger = messageEvent("evt-other", "+15552220000", "LIST");
+  assert.deepEqual(await (await webhook(signedMessage(stranger))).json(), { ignored: true });
+  assert.deepEqual(commands, [{ userId: "user-1", attemptId: undefined, text: "What reminders do I have?" }]);
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].destination, "+15551230000");
+  assert.match(replies[0].key, /^cj-text-[a-f0-9]{64}$/);
+  assert.equal(replies[0].body, "You have no open reminders.");
+});

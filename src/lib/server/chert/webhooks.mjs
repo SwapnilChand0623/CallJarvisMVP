@@ -104,7 +104,7 @@ export function createFaceTimeWebhook({ store, livekit, secret }) {
   };
 }
 
-export function createIMessageWebhook({ store, domain, secret }) {
+export function createIMessageWebhook({ store, domain, secret, handleVerifiedText, sendReply }) {
   return async function imessageWebhook(request) {
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     const raw = await request.text();
@@ -117,10 +117,12 @@ export function createIMessageWebhook({ store, domain, secret }) {
       return json({ error: "invalid_json" }, 400);
     }
     const id = eventId(request, event, raw);
-    if (!await store.claimEvent(id)) return json({ duplicate: true });
+    let acquired = false;
     try {
+      acquired = await store.claimEvent(id);
+      if (!acquired) return json({ duplicate: true });
       const type = event.event_type || event.type || "";
-      if (type === "message.received") return json(await receive(event));
+      if (type === "message.received") return json(await receive(event, id));
       const providerId = event?.data?.message_id || event?.data?.id || null;
       if (!providerId) return json({ ignored: true });
       const attempt = await store.findByProvider("imessage", providerId);
@@ -130,25 +132,41 @@ export function createIMessageWebhook({ store, domain, secret }) {
       const saved = await store.save(applyObserved(attempt, kind, null, providerId));
       return json(publicResult(saved || attempt, null));
     } catch {
-      store.releaseEvent(id);
+      if (acquired) await store.releaseEvent(id);
       return json({ error: "webhook_failed" }, 500);
     }
   };
 
-  async function receive(event) {
-    if (event?.data?.chat?.is_group === true) return { ignored: true };
+  async function receive(event, id) {
+    if (event?.data?.chat?.is_group === true || event?.data?.message?.is_from_me === true) return { ignored: true };
     const handle = event?.data?.message?.sender_handle?.handle || event?.from || "";
     const profile = await store.findUserByHandle(handle);
-    if (!profile?.userId) return { ignored: true };
+    if (!profile?.userId || profile.outreachEnabled === false ||
+      (Array.isArray(profile.channels) && !profile.channels.includes("imessage"))) return { ignored: true };
     const text = inboundText(event);
+    async function reply(message) {
+      if (!sendReply || !message) return "disabled";
+      const key = `cj-text-${createHash("sha256").update(id).digest("hex")}`;
+      try {
+        const delivery = await sendReply(profile.destination, key, message);
+        return delivery.kind;
+      } catch {
+        // The command has already run and the send may have reached Chert.
+        return "unknown";
+      }
+    }
     if (isAcknowledgement(text)) {
       const reminder = await store.latestOpenReminder(profile.userId);
-      if (!reminder) return { acknowledged: false };
+      if (!reminder) return { acknowledged: false, replyStatus: await reply("There is no reminder waiting for acknowledgment.") };
       const updated = await store.acknowledgeReminder(profile.userId, reminder.id);
-      return { acknowledged: updated === true, reminderId: updated ? reminder.id : null };
+      return { acknowledged: updated === true, reminderId: updated ? reminder.id : null, replyStatus: await reply(updated ? "Reminder acknowledged." : "I couldn’t acknowledge that reminder.") };
     }
     if (!text) return { ignored: true };
     const attempt = await store.latestOutboundAttempt(profile.userId, "imessage");
+    if (handleVerifiedText) {
+      const result = await handleVerifiedText({ userId: profile.userId, attemptId: attempt?.id, text });
+      return { forwarded: true, replyStatus: await reply(result) };
+    }
     if (!attempt || !domain) return { forwarded: false };
     await domain.handle({
       action: "inboundMessage",

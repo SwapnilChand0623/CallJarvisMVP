@@ -55,10 +55,14 @@ export function facetimeWebhookHandler(services) {
   });
 }
 
-export function imessageWebhookHandler(services) {
+export function imessageWebhookHandler(services, handleVerifiedText) {
   return createIMessageWebhook({
     store: services.store,
     domain: services.domain,
+    handleVerifiedText,
+    sendReply: services.env.CHERT_MESSAGING_TOKEN && services.env.CHERT_IMESSAGE_MODE !== "simulate"
+      ? (destination, id, text) => services.imessage.send({ destination, id, idempotencyKey: id }, text)
+      : undefined,
     secret: services.env.CHERT_WEBHOOK_SECRET,
   });
 }

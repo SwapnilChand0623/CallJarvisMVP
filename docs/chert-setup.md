@@ -55,7 +55,7 @@ Keep these on the server. Do not commit them.
 7. If the agent audio is not ready, no call is placed and the attempt returns to `pending` so a later scheduler pass can try the same key.
 8. Callbacks update the same attempt. A later or repeated event cannot move `completed`, `simulated`, `unanswered`, or `failed` backward. Terminal calls delete the LiveKit room. Raw transcripts and message text are not written onto the attempt.
 
-An iMessage reply of `YES`, `OK`, `ACK`, or `GOT IT` acknowledges only the newest open reminder for the verified sender. Any other handle, a shared handle, or a group chat does nothing. Other text is posted to the voice action route as `{ action: "inboundMessage", args: { text }, call: { attemptId } }`. The sender's user id is taken from the attempt, not from the message.
+An iMessage reply of `YES`, `OK`, `ACK`, or `GOT IT` acknowledges only the newest open reminder for the verified sender. Any other handle, a shared handle, or a group chat does nothing. Other texts from an opted-in, verified sender use the same reminder actions as voice. A sender can text LIST or create a reminder without any prior outreach. If a previous outreach attempt exists, it supplies context for short commands such as SNOOZE 30 MIN. Chert sends the command result back to the verified destination when a messaging token is configured and simulation mode is off.
 
 ## Acceptance checks
 
@@ -71,6 +71,6 @@ The checks cover one simulated attempt, a single live create under two concurren
 ## Dependencies still owned elsewhere
 
 - The Supabase adapter reads `destination`, `verified_at` and `opted_in_channels`, and authorizes sends through `begin_notification_delivery`. Use a normalized destination (E.164 or lowercase email).
-- Run the hosted integration in simulation mode until durable webhook deduplication is wired. The webhook store expects `provider_events`, which is absent from the deployed schema. For a hosted FaceTime attempt with an unknown outcome and no provider ID, leave the attempt for reconciliation without starting another call.
+- Apply the `chert_provider_events` migration before connecting a live webhook. Configure a messaging-capable Chert account, point its signed webhook at the hosted iMessage route, and set `CHERT_WEBHOOK_SECRET` and `CHERT_MESSAGING_TOKEN` there. For a hosted FaceTime attempt with an unknown outcome and no provider ID, leave the attempt for reconciliation without starting another call.
 - Codex should keep calling `POST /api/internal/outreach` with the claimed attempt id and treat HTTP 200 plus `outcome: "unknown"` as in flight, not as a reason to claim a second attempt.
 - Claude Code's worker must greet only when room metadata gains `chert_bridge_ready`, and its voice route should accept `inboundMessage` for iMessage text.

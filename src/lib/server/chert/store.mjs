@@ -191,7 +191,7 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
       return Array.isArray(inserted) ? inserted.length > 0 : Boolean(inserted);
     },
     releaseEvent(eventId) {
-      void rest(env, fetchImpl, `provider_events?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" }).catch(() => {});
+      return rest(env, fetchImpl, `provider_events?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" }).catch(() => {});
     },
     async claimSend(attemptId) {
       const claim = await rest(env, fetchImpl, "rpc/begin_notification_delivery", {

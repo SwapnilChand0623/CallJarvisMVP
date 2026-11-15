@@ -37,7 +37,7 @@ export function parseMessage(raw: string): Intent {
   if ((match = /^(?:done|did it|finished|complete|completed|mark (?:it )?done)\b(.*)$/.exec(text))) {
     return { action: "completeReminder", args: { reminder: named(match[1].replace(/^ ?(with|:)/, "").trim()) } };
   }
-  if (/^(?:list|reminders|what'?s due|what is due|what do i have)\b/.test(text)) return { action: "listReminders", args: {} };
+  if (/^(?:list|reminders|what'?s due|what is due|what do i have|what reminders do i have)\b/.test(text)) return { action: "listReminders", args: {} };
   if ((match = /^turn (on|off) (?:the )?(.+?)[.!]?$/.exec(text)) || (match = /^turn (?:the )?(.+?) (on|off)[.!]?$/.exec(text))) {
     const [first, second] = [match[1], match[2]];
     const on = first === "on" || second === "on";
