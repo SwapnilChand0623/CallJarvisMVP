@@ -12,15 +12,136 @@ Built during a 24-hour hackathon, this MVP demonstrates the core event-to-conver
 - **Voice** — LiveKit Agents (Node.js) and Gemini Live
 - **Communications** — Chert FaceTime Audio and iMessage
 
-## Starting point
+## Current state (Sunday 15 November 2026)
 
-The LiveKit worker in [`agent/`](agent/) answers inbound FaceTime Audio through
-Chert. Swapnil confirmed a conversation on his phone. The [agent setup
-guide](agent/README.md) covers local startup and the separate Gemini Interactions
-API check. The dashboard, persistent reminders, escalation, and simulated
-smart-home flows still need implementation.
+Everything below is deployed from `main` and has been used on a real phone unless it says otherwise.
 
-## 24-hour MVP work plan
+| Feature | State |
+| --- | --- |
+| Call Jarvis on FaceTime Audio or Video and manage reminders by voice | Working |
+| Jarvis calls you about a **critical** reminder, with a retry after a missed call | Working; the retry after a declined call has not been re-tested since it was fixed |
+| "Call me back in N minutes" | Working |
+| Avatar on FaceTime Video calls (the dashboard's wooden horse mark; turns red for critical) | Working |
+| Home simulator at `/simulator`: Home/Away, stove, porch light, prop map, camera | Working |
+| Camera prop recognition through Gemini (Red Bull can, black box) | Unconfirmed since the model was changed in PR #12; the Trigger buttons always work |
+| Stove on while Away raises a critical alert and a call within seconds | Deployed in PR #15; confirmed by the user's video alert test |
+| Critical home alerts are FaceTime **Video** calls showing the live camera | Working (user confirmed "it works") |
+| "Show me the camera" on a video call the user places | Deployed in PR #17; **not yet tried on a real call** |
+| Logs page at `/logs`: why each call happened and a timeline | Working |
+| iMessage | Not available on the Chert trial (it cannot send first); code exists |
+| New user sign-up | Blocked at phone verification: no SMS provider is configured in Supabase |
+
+**Read [the handoff](#handoff-for-the-next-ai) before changing anything.** The sections after it are the original
+hackathon plan, kept for reference; parts of it are out of date.
+
+## Handoff for the next AI
+
+### How the system fits together
+
+```
+iPhone FaceTime <-> Chert line <-> LiveKit room <-> worker (agent/, Gemini Live)
+                                                        |  POST /api/internal/voice (bearer VOICE_TOOL_TOKEN)
+scheduler (scripts/local-scheduler.mjs) --POST /api/internal/outreach--> web (Next.js) <-> Supabase Postgres
+laptop browser (/simulator camera) --publish-only token--> LiveKit room --> worker relays video to FaceTime
+```
+
+Three Railway services are built from this repository; the database is Supabase. See
+[docs/deploy-railway.md](docs/deploy-railway.md).
+
+| Service | Root | Start | What it does |
+| --- | --- | --- | --- |
+| `web` | `/` | `npm start` | Dashboard, voice actions, outreach, call watching, camera tokens |
+| `worker` | `/agent` | `npm start` | The Jarvis voice agent (LiveKit Agents, Node) |
+| `scheduler` | `/` | `npm run scheduler` | Finds due reminders, check-ins and home alerts; `SCHEDULER_INTERVAL_SECONDS=5` |
+
+One more process is required and is **not** on Railway: `chert dev --agent calljarvis --env-file .env.local --no-prewarm`
+running on the owner's laptop. The trial line refuses a custom webhook URL, so this is what routes inbound calls
+to the worker, and `--no-prewarm` leaves the line free for outbound calls. Without it, calls to Jarvis are not answered.
+
+### Where things live
+
+| Path | Contents |
+| --- | --- |
+| `agent/agent.mjs` | Worker entry: joins the room, loads context and tools from the server, opens the Gemini Live session |
+| `agent/feed.mjs`, `agent/avatar.mjs` | The worker's video track: avatar frames, and the relayed home camera |
+| `agent/prompt.mjs`, `tools.mjs`, `voice-api.mjs`, `greet.mjs`, `reply-guard.mjs`, `call-context.mjs` | Wording, tool registration, server client, greeting timing, silence guard, job metadata parsing |
+| `src/app/api/internal/voice/_lib/` | Voice actions. `contract.ts` is the tool list sent to the model, `actions.ts` implements them, `handler.ts` authenticates and resolves the user, `store-supabase.ts` and `store-memory.ts` are the two stores, `call-log.ts` writes Logs lines |
+| `src/lib/server/chert/` | Outbound calls: `providers.mjs` (LiveKit and Chert HTTP), `deliver.mjs` (place a call once), `watch.mjs` (poll Chert until the call ends), `store.mjs` |
+| `src/lib/server/home/` | Simulator: `service.ts` (modes, devices, alerts), `vision.ts` (Gemini prop recognition), `camera.ts` (camera tokens) |
+| `src/lib/server/logs.ts`, `src/app/logs/` | Logs page data and UI |
+| `src/app/simulator/` | Simulator page, including the camera stream into calls |
+| `supabase/migrations/` | Schema. All migrations are applied to the hosted project |
+| `docs/` | `live-setup.md`, `deploy-railway.md`, `home-simulator.md`, `chert-setup.md`, `data-contract.md` |
+
+### Rules the code depends on
+
+- **The model never chooses the user.** The server resolves the user from the notification attempt (outbound) or
+  `VOICE_DEMO_USER_ID` (inbound). Do not add a user id to any tool.
+- **Only critical priority places a call.** Other priorities start with iMessage, which the trial cannot send.
+  Check-ins ("call me back") are stored as critical for that reason.
+- **Outbound audio must be published before Chert dials.** The worker pre-sets its audio output for outbound
+  calls, and passes its real participant identity to Chert. Jarvis greets on `chert_bridge_ready` in the room
+  metadata, which `watch.mjs` sets by polling Chert.
+- **FaceTime shows only the worker's video.** A camera feed has to be relayed through the worker's track
+  (`agent/feed.mjs`). The browser's token can publish a camera into one room and cannot subscribe.
+- **Alerts:** an event is critical and call-worthy only while the home is Away. An unacknowledged alert of the
+  same type is not raised again for two minutes; Reset acknowledges everything.
+- **Nothing is recorded.** No audio, video or transcript is stored. The Logs page is built from action
+  summaries in `communication_metadata` and from `notification_attempts`.
+- **Jarvis cannot see video** and is told not to describe it. It answers questions about the home from the
+  simulator's device state.
+- **The avatar is the project's own wooden horse mark** (the dashboard is branded Sir Jarvis, PRs #11 and #14).
+  Do not replace it with the film's J.A.R.V.I.S. or arc reactor artwork, or clone the film's voice.
+
+### How to work on it
+
+```
+npm ci && (cd agent && npm ci)
+npm run typecheck && npm run lint && npm run build
+npm test                                             # dashboard, home, logs (37)
+node --test src/lib/server/chert/*.test.mjs          # outreach (29)
+node --import ./src/app/api/internal/voice/_tests/resolve-ts.mjs --test src/app/api/internal/voice/_tests/voice.test.mjs   # voice actions (20)
+(cd agent && npm test)                               # worker (17)
+```
+
+- `next build` and `next dev` modify `next-env.d.ts`; run `git checkout -- next-env.d.ts` before committing.
+- Work on a branch, open a PR to `main`, merge it. PRs #7 to #17 follow this pattern and their descriptions
+  say what each changed and what was left unverified.
+- **Railway does not redeploy on push.** After merging, redeploy `web` and `worker` (and `scheduler` if
+  `scripts/` changed) from `main`, then check that each deployment reports success.
+- Secrets live only in Railway variables and local `.env.local` files. Never commit them, paste them in chat,
+  or print them in logs. `.env.example` lists the names.
+- Useful switches: `ALERT_VIDEO=0` on `web` puts alert calls back on audio; `JARVIS_VIDEO=1` on `worker`
+  publishes video on inbound calls; `CHERT_FACETIME_POLL=0` turns call watching off.
+
+### Open items, most useful first
+
+1. **Try "show me the camera" on a real FaceTime Video call** (PR #17). Start the camera on the laptop's
+   Simulator, call from the iPhone, ask for the camera, then ask to hide it. If the avatar stays, the worker log
+   lines starting `[jarvis] camera feed` and the `web` log for `/api/home/camera` show where it stopped.
+2. **Confirm camera prop recognition** (PR #12 moved it to `gemini-flash-lite-latest` with a 20 second timeout).
+   The `web` log prints one line per look.
+3. **Confirm the silence guard** (PR #13): Jarvis once went quiet for 50 seconds after a successful tool call.
+   The guard prompts it once after 5 seconds. Cause unknown.
+4. **First-call stall:** one FaceTime Video call took about 30 seconds before Jarvis spoke. Opening the voice
+   session as soon as an inbound call arrives would avoid it. Proposed, not approved by the owner.
+5. **Any caller is treated as the demo user.** Chert does not pass the caller's number to the worker. This now
+   includes asking to see the camera while the Simulator's camera is on.
+6. **`chert dev` still needs the owner's laptop.** Moving it to Railway was deferred by the owner.
+7. **Sign-up** needs a Supabase phone provider, or a way to skip phone verification for the demo.
+8. **Re-test the missed-call retry** with a declined call (`critical_fallback_seconds` is 120).
+
+### Constraints
+
+- The Chert trial ends around 5:30 PM Central on Monday 16 November 2026 and allows 50 FaceTime minutes a day.
+  Test calls spend that budget.
+- The demo camera must run on a different device from the phone that takes the call: a phone pauses its camera
+  when FaceTime rings.
+- ElevenLabs was tried and dropped by the owner (PR #9 closed). Do not bring it back unasked.
+
+## Original hackathon plan (historical)
+
+The workstreams below are finished and merged. Treat this section as background, not as a to-do list.
 
 ### Pull your assignment
 
@@ -131,10 +252,6 @@ and [Chert outbound FaceTime](https://docs.trychert.com/facetime/outbound).
    the same call-request workflow with an explicit simulation label and report
    which channels ran live.
 
-## Frontend implementation status
+## Frontend notes
 
-The frontend branch supplies Overview, JarvisRemind, JarvisHome, JarvisTalks, and Settings with labeled browser-local fixtures, four reminder priorities, separate acknowledgment, snooze/rescheduling, light simulation, communication rules, and opt-in context/check-ins. Run `npm ci && npm run dev` (Node 22.13+).
-
-`/auth` provides an optional connected reminder workspace against the shared README contract. Configure public Supabase values from `.env.example` only after the backend schema, owner-scoped RLS, and test account are deployed. The connected adapter is implemented but has not been tested against a live project. Other integrations remain explicitly simulated pending backend contracts.
-
-See [frontend handoff](docs/FRONTEND_HANDOFF.md), [demo runbook](docs/demo-runbook.md), and [pitch](docs/PITCH.md). Validate with `npm run lint`, `npm test`, `npm run build -- --webpack`, and `npm run typecheck`.
+See [frontend handoff](docs/FRONTEND_HANDOFF.md), [demo runbook](docs/demo-runbook.md), and [pitch](docs/PITCH.md). The dashboard reads live data from Supabase; the navigation is Home, Logs, Simulator and Account, and `/reminders` is linked from Home and Logs.
