@@ -8,6 +8,7 @@ import { parseCallContext } from './call-context.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
 import { buildGreeting, buildInstructions } from './prompt.mjs';
+import { guardRepliesAfterTools } from './reply-guard.mjs';
 import { buildTools } from './tools.mjs';
 import { createVoiceApi } from './voice-api.mjs';
 
@@ -60,6 +61,10 @@ const agent = defineAgent({
     ctx.addShutdownCallback(() => session.close());
     // The avatar pulses while Jarvis is speaking.
     if (avatar) session.on('agent_state_changed', event => avatar.setSpeaking(event.newState === 'speaking'));
+    // If the model goes quiet after a tool call, prompt it once to answer.
+    const stopGuard = guardRepliesAfterTools(session);
+    ctx.addShutdownCallback(async () => stopGuard());
+    session.on('error', event => console.error(`[jarvis] session error: ${event?.error?.message ?? event?.error?.type ?? 'unknown'}`));
     if (call.direction === 'outbound') {
       // RoomIO waits for the caller before publishing its default audio output.
       // Chert needs the track before dialing, so publish the session's output now.

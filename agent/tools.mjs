@@ -17,7 +17,13 @@ export function buildTools(specs, run, make = spec => llm.tool(spec)) {
     tools[spec.name] = make({
       description: spec.description,
       parameters: spec.parameters,
-      execute: async args => toolReply(await run(spec.name, args && typeof args === 'object' ? args : {})),
+      execute: async args => {
+        const started = Date.now();
+        const outcome = await run(spec.name, args && typeof args === 'object' ? args : {});
+        // Names and outcomes only: arguments can hold what the user said.
+        console.log(`[jarvis] tool ${spec.name}: ${outcome?.ok === true ? 'ok' : `failed (${outcome?.error?.code ?? 'unknown'})`} in ${Date.now() - started} ms`);
+        return toolReply(outcome);
+      },
     });
   }
   return tools;
