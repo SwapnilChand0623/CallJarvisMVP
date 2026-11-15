@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Mail } from "lucide-react";
+import { ArrowRight, Mail } from "lucide-react";
 import { JarvisCore } from "@/components/jarvis-core";
 import { Brand } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -29,27 +29,23 @@ export default function Auth() {
       <section className="welcome-story">
         <Brand />
         <div className="welcome-story-copy">
-          <span className="eyebrow">A LITTLE MORE PEACE OF MIND</span>
+          <span className="eyebrow">YOUR EVERYDAY ODYSSEY</span>
           <h1>
-            More living.
+            Life is a voyage.
             <br />
-            Less remembering.
+            Find your north.
           </h1>
           <p>
-            Your reminders, a conversation away. Meet the assistant you can
-            simply call.
+            A steady guide for everything ahead. Speak your reminders, chart
+            your day, and leave a little room for adventure.
           </p>
           <div className="voice-illustration">
             <JarvisCore />
           </div>
-          <div className="example-bubble">
-            “Remind me to pick up my prescription tomorrow.”
-            <span>
-              <Check size={14} /> One less thing on your mind.
-            </span>
-          </div>
         </div>
-        <p className="welcome-footnote">Your day, a little lighter.</p>
+        <p className="welcome-footnote">
+          Guided by the stars. Grounded in your day.
+        </p>
       </section>
       <section className="welcome-form-wrap">
         <div className="welcome-form">
@@ -60,7 +56,7 @@ export default function Auth() {
             {checkEmail
               ? "Check your inbox"
               : signup
-                ? "Meet your Jarvis."
+                ? "Your voyage begins."
                 : "Welcome back."}
           </h2>
           <p className="form-intro">
@@ -191,7 +187,7 @@ export default function Auth() {
           )}
           <p className="form-fineprint">
             {signup
-              ? "Next: add the number where Jarvis can reach you."
+              ? "Next: add the number where Sir Jarvis can reach you."
               : "A calmer day starts here."}
           </p>
         </div>

@@ -55,8 +55,8 @@ export default function Account() {
         </div>
       </section>
       <p className="account-note">
-        Jarvis’s number is on your <Link href="/">homepage</Link>. Your number
-        is where Jarvis can reach you once calling is enabled.
+        Sir Jarvis’s number is on your <Link href="/">homepage</Link>. Your
+        number is where Sir Jarvis can reach you once calling is enabled.
       </p>
       {(error || profileError) && (
         <p role="alert" className="flow-error">

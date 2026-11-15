@@ -1,21 +1,17 @@
 "use client";
 import Link from "next/link";
-import Image from "next/image";
+import { TrojanHorse } from "./trojan-horse";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { House, BellRing, UserRound, ArrowUpRight, Radar } from "lucide-react";
 import { useAccount } from "./account-provider";
 export function Brand() {
   return (
-    <Link href="/" className="brand" aria-label="CallJarvis home">
-      <Image
-        src="/brand/calljarvis-logo.png"
-        alt="CallJarvis"
-        width={884}
-        height={588}
-        className="brand-logo"
-        preload
-      />
+    <Link href="/" className="brand" aria-label="Sir Jarvis home">
+      <TrojanHorse className="brand-horse" />
+      <span className="brand-wordmark">
+        Sir Jarvis<small>A CELESTIAL NAVIGATOR</small>
+      </span>
     </Link>
   );
 }
@@ -92,7 +88,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </header>
       <main className="simple-main">{children}</main>
       <footer className="simple-footer">
-        <span>A little less to remember.</span>
+        <span>Every day, a little odyssey.</span>
         <Link href="/account">
           Your account <ArrowUpRight size={13} />
         </Link>
