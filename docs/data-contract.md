@@ -1,9 +1,17 @@
 # CallJarvis database contract
 
-The database branch owns the shared contract for all six workstreams. The migration
-is standalone from `main`; merge it before the scheduler PR #2. No hosted project
-has been selected or modified. The connected project's name is Campus Roommate
-Finder, which is not evidence that it is CallJarvis's deployment target.
+The database branch owns the shared contract for all six workstreams. Merge it
+before scheduler PR #2. Both migrations are deployed to the **CallJarvis** project
+`boglzcpbnzmpxdaqwqvb` in `us-east-1`. Repository migration versions match hosted
+migration history so later CLI deployments do not replay the schema.
+
+Hosted verification passed using temporary, rolled-back Auth users: profile/rule
+onboarding, cross-owner read/write isolation, server-only claim permissions,
+idempotent claims and a single pending-to-sending authorization. All 12 public
+tables have RLS. Security advisors report no findings; performance advisors report
+only unused indexes expected before application traffic. The demo seed was not
+installed on the hosted project. Browser login, Cron, provider delivery and the
+application's environment configuration still need their owning workstreams.
 
 ## Local startup and verification
 
@@ -136,7 +144,7 @@ No provider credentials, outreach secrets, or Cron jobs are installed here.
   migration does not silently install Cron or retain recordings. Keep only active
   reminder history as required by the user's selected retention policy.
 
-Hosted verification remains separate: select the intended CallJarvis project,
-inspect existing tables/migrations, apply the reviewed migration, run advisors,
-and verify with that project's real Auth accounts. Do not run the fixture seed on
-a hosted database containing real users.
+For future deployments, inspect existing tables/migrations, apply reviewed migrations,
+run advisors and verify with real Auth roles. Never run the demo seed against a
+hosted database containing real users. Migration files were created with the CLI
+and renamed to the versions recorded by the hosted migration service.

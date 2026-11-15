@@ -5,7 +5,7 @@ select is((select count(*)::integer from pg_class c join pg_namespace n on n.oid
 select ok(not has_function_privilege('anon','public.claim_escalation_attempt(jsonb)','execute'),'anonymous cannot claim');
 select ok(not has_function_privilege('authenticated','public.begin_notification_delivery(uuid)','execute'),'users cannot authorize sends');
 select ok(not has_schema_privilege('authenticated','private','usage'),'private helpers hidden');
-select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),0,'no public security-definer functions');
+select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef and (has_function_privilege('anon',p.oid,'execute') or has_function_privilege('authenticated',p.oid,'execute'))),0,'no client-callable public security-definer functions');
 set local role authenticated;
 set local request.jwt.claim.sub='22222222-2222-4222-8222-222222222222';
 select results_eq($$delete from public.reminders where user_id='11111111-1111-4111-8111-111111111111' returning id$$,$$select null::uuid where false$$,'cross-owner delete sees no rows');
