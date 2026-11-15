@@ -8,6 +8,8 @@ import {
 } from "@/lib/supabase/reminders";
 import { makeReminder, priorities, type Reminder } from "@/lib/mockData";
 import { Button } from "@/components/ui/button";
+import { SpeakButton } from "@/components/speak-button";
+import { reminderLine } from "@/lib/speech-line";
 import Link from "next/link";
 export default function Auth() {
   const [client] = useState(getSupabaseClient);
@@ -353,6 +355,10 @@ export default function Auth() {
                         </p>
                       </div>
                       <div className="save-row">
+                        <SpeakButton
+                          text={reminderLine(r.title, r.dueAt)}
+                          getToken={async () => (await client.auth.getSession()).data.session?.access_token ?? null}
+                        />
                         <Button
                           disabled={busy}
                           variant="ghost"
