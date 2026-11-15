@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decide } from "./policy.ts";
-import { createHandler } from "./handler.ts";
+import { createServer } from "node:http";
+import { once } from "node:events";
 
 const now = new Date("2026-11-15T06:30:00Z"); // 00:30 in Chicago
 const fixture = (patch = {}, policy = {}) => ({
@@ -45,47 +46,108 @@ test("critical home event alerts immediately; only definite unanswered triggers 
   ] }), now), [{ channel: "imessage", stage: "fallback" }]);
 });
 
-test("overlapping ticks and loss after acceptance reuse the database attempt", async () => {
+test("Edge entry point hands off one attempt across overlapping runs and reconciles a lost response", async (t) => {
+  const attemptId = "4f2bbcc3-a9c1-4a19-bbdb-69a1ad9a7320";
   const jobs = new Map();
-  const calls = [];
+  const handoffs = [];
+  const providerSends = [];
+  const failures = [];
   let scans = 0;
-  let providerSends = 0;
-  const handler = createHandler({
-    token: "scheduler", now: () => now,
-    candidates: async () => {
-      scans++;
-      return [fixture({ kind: "home_event", priority: "critical" }),
-        fixture({ id: "stale", kind: "check_in" }),
-        fixture({ id: "acked", acknowledgedAt: now.toISOString() })];
-    },
-    claim: async (job) => {
-      assert.notEqual(job.id, "acked");
-      if (job.id === "stale") return null; // Database rejected an outdated snapshot.
-      const key = JSON.stringify(job);
-      if (jobs.get(key)?.leased) return null;
-      jobs.set(key, { leased: true });
-      return { attemptId: key };
-    },
-    outreach: async (attemptId) => {
-      calls.push(attemptId);
-      if (calls.length === 1) {
-        providerSends++;
-        // Keep the claim leased until the fixture advances time below.
-        throw new Error("lost response after provider acceptance");
+  const dueAt = new Date(Date.now() - 120_000).toISOString();
+  const candidates = [
+    fixture({ kind: "home_event", priority: "critical", dueAt }),
+    fixture({ id: "stale", kind: "check_in", dueAt }),
+    fixture({ id: "acked", acknowledgedAt: dueAt, dueAt }),
+  ];
+  const server = createServer(async (request, response) => {
+    try {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const payload = JSON.parse(Buffer.concat(chunks).toString());
+      const reply = (data) => {
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify(data));
+      };
+      assert.equal(request.method, "POST");
+      if (request.url === "/api/internal/outreach") {
+        assert.equal(request.headers.authorization, "Bearer outreach-fixture");
+        assert.equal(request.headers.apikey, undefined);
+        assert.deepEqual(payload, { attemptId });
+        handoffs.push(payload.attemptId);
+        if (providerSends.length === 0) {
+          providerSends.push(payload.attemptId);
+          jobs.values().next().value.status = "unknown";
+          // The provider accepted the send, but the HTTP response never reached Edge.
+          response.destroy();
+          return;
+        }
+        jobs.values().next().value.status = "simulated";
+        return reply({ attemptId, outcome: "simulated" });
       }
-      // Transport reconciles the same attempt without contacting the provider again.
-    },
+
+      assert.equal(request.headers.apikey, "db-fixture");
+      assert.equal(request.headers.authorization, "Bearer db-fixture");
+      if (request.url === "/rest/v1/rpc/list_escalation_candidates") {
+        scans++;
+        assert.deepEqual(payload, { p_limit: 20 });
+        candidates[0].attempts = Array.from(jobs.values()).map(({ status }) => ({
+          channel: "facetime", stage: "initial", status, outcomeAt: null,
+        }));
+        return reply(candidates);
+      }
+
+      assert.equal(request.url, "/rest/v1/rpc/claim_escalation_attempt");
+      if (payload.p_job.id === "stale") return reply(null);
+      assert.deepEqual(payload, { p_job: {
+        kind: "home_event", id: "source", revision: "1", channel: "facetime", stage: "initial",
+      } });
+      const key = JSON.stringify(payload.p_job);
+      const existing = jobs.get(key);
+      if (existing?.leased) return reply(null);
+      if (existing) existing.leased = true;
+      else jobs.set(key, { leased: true, status: "pending" });
+      return reply({ attemptId });
+    } catch (error) {
+      failures.push(error);
+      response.writeHead(500).end();
+    }
   });
-  const run = (token = "scheduler") => handler(new Request("http://localhost/escalate", {
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  // Supply Deno's environment and serve APIs while exercising index.ts and real fetch.
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  let handler;
+  globalThis.Deno = {
+    env: new Map(Object.entries({
+      SUPABASE_URL: origin,
+      SUPABASE_SERVICE_ROLE_KEY: "db-fixture",
+      OUTREACH_ORIGIN: origin,
+      OUTREACH_TOKEN: "outreach-fixture",
+      ESCALATE_TOKEN: "scheduler-fixture",
+    })),
+    serve: (run) => { handler = run; },
+  };
+  t.after(() => { delete globalThis.Deno; });
+  await import("./index.ts");
+
+  const run = (token = "scheduler-fixture") => handler(new Request(`${origin}/escalate`, {
     method: "POST", headers: { Authorization: `Bearer ${token}` },
   }));
   assert.equal((await run("invalid")).status, 401);
   assert.equal(scans, 0);
-  assert.deepEqual((await Promise.all([run(), run()])).map((r) => r.status).sort(), [200, 502]);
+  const overlapping = await Promise.all([run(), run()]);
+  assert.deepEqual(overlapping.map((r) => r.status).sort(), [200, 502]);
   assert.equal(jobs.size, 1);
-  assert.equal(calls.length, 1);
-  jobs.get(calls[0]).leased = false;
+  assert.deepEqual(handoffs, [attemptId]);
+
+  jobs.values().next().value.leased = false;
+  const retry = await run();
+  assert.equal(retry.status, 200);
+  assert.deepEqual(await retry.json(), { scanned: 3, claimed: 1, handedOff: 1, errors: 0 });
   assert.equal((await run()).status, 200);
-  assert.deepEqual(calls, [calls[0], calls[0]]);
-  assert.equal(providerSends, 1);
+  assert.deepEqual(handoffs, [attemptId, attemptId]);
+  assert.deepEqual(providerSends, [attemptId]);
+  assert.deepEqual(failures, []);
 });

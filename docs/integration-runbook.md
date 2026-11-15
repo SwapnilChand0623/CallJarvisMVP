@@ -70,9 +70,11 @@ manual simulated run passes.
 
 ## Rehearsal
 
-- Run local fixtures: `node --test supabase/functions/escalate/escalate.test.mjs`
-  with Node 24, or use `deno check supabase/functions/escalate/index.ts` to
-  type-check the Edge entry point.
+- Run the policy and HTTP fixture tests with Node 24 using
+  `node --test supabase/functions/escalate/escalate.test.mjs`. The HTTP test
+  loads the Edge entry point and starts stand-ins for PostgREST and outreach
+  on an ephemeral localhost port. Check the actual Edge runtime separately
+  with `deno check supabase/functions/escalate/index.ts`.
 - In the integrated simulator, trigger two manual runs together and then
   repeat. Verify one attempt per source revision, channel and stage; verify
   consent, quiet hours across midnight, call caps and delays. Simulate a
