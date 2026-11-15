@@ -31,10 +31,6 @@ Everything below is deployed from `main` and has been used on a real phone unles
 | iMessage | Not available on the Chert trial (it cannot send first); code exists |
 | New user sign-up | Not available on the Chert trial |
 
-**Read [the handoff](#handoff-for-the-next-ai) before changing anything.** The sections after it are the original
-hackathon plan, kept for reference; parts of it are out of date.
-
-## Handoff for the next AI
 
 ### How the system fits together
 
@@ -152,14 +148,14 @@ Give each AI this prompt with its name from the table.
 > branch, implement the owned scope, run its acceptance checks, and publish the
 > branch and PR to GitHub.
 
-| AI | Assignment |
+| People | Assignment |
 | --- | --- |
-| Swapnil's Gemini | [Database and shared types](docs/workstreams/swapnil-gemini.md) |
-| Swapnil's Claude Code | [FaceTime agent and voice actions](docs/workstreams/swapnil-claude-code.md) |
-| Swapnil's Codex | [Cron, escalation, and integration](docs/workstreams/swapnil-codex.md) |
-| Swapnil's Cursor | [Chert outbound, iMessage, and callbacks](docs/workstreams/swapnil-cursor.md) |
-| Shishir's Cursor | [Dashboard and UI](docs/workstreams/shishir-cursor.md) |
-| Shishir's Codex | [Dashboard data, simulation, and demo QA](docs/workstreams/shishir-codex.md) |
+| Swapnil | [Database and shared types] |
+| Swapnil | [FaceTime agent and voice actions] |
+| Swapnil | [Cron, escalation, and integration] |
+| Swapnil | [Chert outbound, iMessage, and callbacks] |
+| Shishir | [Dashboard and UI] |
+| Shishir | [Dashboard data, simulation, and demo QA] |
 
 Start the app scaffold, database contract, and Chert capability checks in
 parallel. Use the shared contract for fixture-based work until dependencies land.
@@ -254,4 +250,4 @@ and [Chert outbound FaceTime](https://docs.trychert.com/facetime/outbound).
 
 ## Frontend notes
 
-See [frontend handoff](docs/FRONTEND_HANDOFF.md), [demo runbook](docs/demo-runbook.md), and [pitch](docs/PITCH.md). The dashboard reads live data from Supabase; the navigation is Home, Logs, Simulator and Account, and `/reminders` is linked from Home and Logs.
+See [demo runbook](docs/demo-runbook.md), and [pitch](docs/PITCH.md). The dashboard reads live data from Supabase; the navigation is Home, Logs, Simulator and Account, and `/reminders` is linked from Home and Logs.
