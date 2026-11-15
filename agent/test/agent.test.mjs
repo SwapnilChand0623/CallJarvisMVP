@@ -5,13 +5,15 @@ import { buildGreeting, buildInstructions } from '../prompt.mjs';
 import { buildTools, toolReply } from '../tools.mjs';
 import { createVoiceApi } from '../voice-api.mjs';
 import { bridgeReady, greetOnBridgeReady } from '../greet.mjs';
+import { HEIGHT, WIDTH, createAvatarState, isCritical, renderFrame } from '../avatar.mjs';
 
 test('call context: inbound from chert, outbound from dispatch metadata', () => {
   assert.deepEqual(parseCallContext('{"chert_call":"call_123","media":{"audio":true}}', 'room-a'),
-    { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, accepted: false, room: 'room-a' });
+    { direction: 'inbound', callId: 'call_123', attemptId: null, bridgeIdentity: null, video: true, accepted: false, room: 'room-a' });
+  assert.equal(parseCallContext('{"chert_call":"c","media":{"audio":true,"video":false}}', 'r').video, false);
   assert.equal(parseCallContext('{"chert_call":"c7161775-cd89","inbound":true}', 'cj-in-x').accepted, true);
   assert.deepEqual(parseCallContext('{"outbound":true,"userId":"someone-else","attemptId":"a-1","reminderId":"r-9","greeting":"bridge_ready"}', 'r'),
-    { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', accepted: false, room: 'r' });
+    { direction: 'outbound', callId: null, attemptId: 'a-1', bridgeIdentity: 'chert-bridge-a-1', video: false, accepted: false, room: 'r' });
   for (const metadata of [undefined, '', 'not json', 'null', '[]', '{"outbound":true}', '{"outbound":"true","attemptId":"a-1"}',
     '{"outbound":true,"attemptId":"a b; drop"}', '{"attemptId":"a-1"}']) {
     const call = parseCallContext(metadata, undefined);
@@ -112,4 +114,31 @@ test('greeting falls back after a delay only when asked to', async () => {
   greetOnBridgeReady(room(), () => greeted++);
   await new Promise(resolve => setTimeout(resolve, 60));
   assert.equal(greeted, 1);
+});
+
+test('avatar: glows brighter while speaking and turns red when critical', () => {
+  const centre = (HEIGHT / 2 - 30) * WIDTH * 4 + (WIDTH / 2 + 70) * 4; // a point beside the core, off the voice line
+  const idle = renderFrame(1, 0, 0);
+  const speaking = renderFrame(1, 1, 0);
+  const critical = renderFrame(1, 0, 1);
+  assert.equal(idle.length, WIDTH * HEIGHT * 4);
+  assert.ok(speaking[centre + 1] > idle[centre + 1], 'the glow reaches further while speaking');
+  assert.ok(idle[centre + 1] > idle[centre], 'calm is teal: more green than red');
+  assert.ok(critical[centre] > critical[centre + 1], 'critical is red: more red than green');
+  assert.ok(idle.every((value, index) => index % 4 !== 3 || value === 255), 'every pixel is opaque');
+
+  const state = createAvatarState();
+  assert.deepEqual(state.step(1 / 15), { voice: 0, alert: 0 });
+  state.setSpeaking(true); state.setCritical(true);
+  const first = state.step(1 / 15);
+  assert.ok(first.voice > 0 && first.voice < 1 && first.alert > 0 && first.alert < 1, 'levels ease in');
+  for (let i = 0; i < 60; i++) state.step(1 / 15);
+  assert.ok(state.step(1 / 15).voice > 0.99);
+});
+
+test('avatar: critical means the call is about a critical reminder, or one is overdue', () => {
+  assert.equal(isCritical(null), false);
+  assert.equal(isCritical({ focusReminder: { priority: 'critical' }, openReminders: [] }), true);
+  assert.equal(isCritical({ focusReminder: null, openReminders: [{ priority: 'critical', overdue: true }] }), true);
+  assert.equal(isCritical({ focusReminder: null, openReminders: [{ priority: 'critical', overdue: false }, { priority: 'high', overdue: true }] }), false);
 });

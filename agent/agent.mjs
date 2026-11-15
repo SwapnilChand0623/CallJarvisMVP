@@ -2,7 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { AutoSubscribe, defineAgent, voice } from '@livekit/agents';
 import { realtime } from '@livekit/agents-plugin-google';
 import { TrackPublishOptions, TrackSource } from '@livekit/rtc-node';
-import { publishDemoCamera } from './camera.mjs';
+import { isCritical } from './avatar.mjs';
+import { publishAvatar } from './camera.mjs';
 import { parseCallContext } from './call-context.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
@@ -32,15 +33,19 @@ const agent = defineAgent({
     // caller before opening a paid model session. Doctor jobs may end without a caller ever joining.
     // Outbound: Chert needs our audio track published before it dials, so the session opens first and stays silent
     // until bridge_ready.
-    if (call.direction === 'inbound' && process.env.JARVIS_VIDEO === '1') {
+    // On FaceTime Video calls the caller sees Jarvis's avatar. It is published before waiting for the caller.
+    let avatar = null;
+    if (call.direction === 'inbound' && call.video && process.env.JARVIS_VIDEO === '1') {
       try {
-        await publishDemoCamera(ctx);
+        avatar = await publishAvatar(ctx);
       } catch (error) {
-        console.warn('[jarvis] demo camera unavailable:', error instanceof Error ? error.message : String(error));
+        console.warn('[jarvis] avatar unavailable:', error instanceof Error ? error.message : String(error));
       }
     }
     const identity = call.direction === 'outbound' ? call.bridgeIdentity : (await ctx.waitForParticipant()).identity;
     const loaded = await context;
+    // Red when the call is about a critical reminder, or one is overdue; teal otherwise.
+    avatar?.setCritical(isCritical(loaded));
     const instructions = buildInstructions(loaded);
     const tools = loaded ? buildTools(loaded.tools, (action, args) => voiceApi(call, action, args)) : {};
 
@@ -53,6 +58,8 @@ const agent = defineAgent({
       }),
     });
     ctx.addShutdownCallback(() => session.close());
+    // The avatar pulses while Jarvis is speaking.
+    if (avatar) session.on('agent_state_changed', event => avatar.setSpeaking(event.newState === 'speaking'));
     if (call.direction === 'outbound') {
       // RoomIO waits for the caller before publishing its default audio output.
       // Chert needs the track before dialing, so publish the session's output now.
