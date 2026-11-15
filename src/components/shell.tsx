@@ -69,9 +69,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Brand />
         <nav aria-label="Main navigation">
           {[
-            { href: "/", label: "Home", icon: House },
+            { href: "/", label: "Overview", icon: House },
             { href: "/logs", label: "Logs", icon: ScrollText },
-            { href: "/simulator", label: "Simulator", icon: Radar },
+            { href: "/simulator", label: "Home", icon: Radar },
             { href: "/account", label: "Account", icon: UserRound },
           ].map(({ href, label, icon: Icon }) => (
             <Link
