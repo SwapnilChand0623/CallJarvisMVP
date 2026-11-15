@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DemoProvider } from "@/components/demo-provider";
 import { Shell } from "@/components/shell";
+import { AccountProvider } from "@/components/account-provider";
 import "./globals.css";
 export const metadata: Metadata = {
   title: "CallJarvis · A little more peace of mind",
@@ -16,7 +17,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <DemoProvider>
-          <Shell>{children}</Shell>
+          <AccountProvider>
+            <Shell>{children}</Shell>
+          </AccountProvider>
         </DemoProvider>
       </body>
     </html>

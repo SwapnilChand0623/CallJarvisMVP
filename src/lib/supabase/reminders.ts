@@ -9,8 +9,10 @@ export const reminderRecordSchema = z.object({
   priority: z.enum(priorities),
   status: z.enum(["pending", "snoozed", "completed", "canceled"]),
   acknowledged_at: z.string().datetime({ offset: true }).nullable(),
+  snoozed_until: z.string().datetime({ offset: true }).nullable().optional(),
 });
-const fields = "id,user_id,title,due_at,priority,status,acknowledged_at";
+const fields =
+  "id,user_id,title,due_at,priority,status,acknowledged_at,snoozed_until";
 export function mapReminderRecord(record: unknown, owner: string): Reminder {
   const row = reminderRecordSchema.parse(record);
   if (row.user_id !== owner)
@@ -22,6 +24,7 @@ export function mapReminderRecord(record: unknown, owner: string): Reminder {
     priority: row.priority,
     status: row.status,
     acknowledgedAt: row.acknowledged_at,
+    snoozedUntil: row.snoozed_until ?? undefined,
     channel: "iMessage",
   };
 }
@@ -34,6 +37,7 @@ export function reminderWrite(r: Reminder, owner: string) {
     priority: r.priority,
     status: r.status,
     acknowledged_at: r.acknowledgedAt,
+    snoozed_until: r.status === "snoozed" ? (r.snoozedUntil ?? r.dueAt) : null,
   });
 }
 export async function reminderOwner(client: SupabaseClient) {
@@ -67,6 +71,7 @@ export async function saveReminder(
           priority: row.priority,
           status: row.status,
           acknowledged_at: row.acknowledged_at,
+          snoozed_until: row.snoozed_until,
         })
         .eq("id", row.id)
         .eq("user_id", owner)

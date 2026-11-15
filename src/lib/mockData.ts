@@ -7,6 +7,7 @@ export const reminderSchema = z.object({
   priority: z.enum(priorities),
   status: z.enum(["pending", "snoozed", "completed", "canceled"]),
   acknowledgedAt: z.string().datetime().nullable().default(null),
+  snoozedUntil: z.string().datetime().optional(),
   channel: z.enum(["FaceTime", "iMessage"]),
 });
 export type Reminder = z.infer<typeof reminderSchema>;
