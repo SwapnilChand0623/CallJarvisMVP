@@ -1,97 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1180" viewBox="0 0 1440 1180" role="img" aria-labelledby="title desc">
-<title id="title">Sir Jarvis — simulator to FaceTime data flow</title><desc id="desc">Three paths show snapshot detection, critical video call setup, and the live camera relay. A return path shows mobile speech becoming saved device actions.</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#315e70"/></marker></defs>
-<rect width="1440" height="1180" fill="#eee9dd"/>
-<style>text{font-family:Arial,Helvetica,sans-serif;fill:#203d4e}.serif{font-family:Georgia,serif}.small{font-size:15px;fill:#5b6d72}.label{font-size:12px;letter-spacing:2px;fill:#7b704f}.edge{fill:none;stroke:#315e70;stroke-width:2;marker-end:url(#arrow)}</style>
-<text x="45" y="57" class="label" font-size="14">SIR JARVIS</text>
-<text x="45" y="99" class="serif" font-size="38">From a critical event to a conversation that acts.</text>
-<text x="45" y="125" class="small" font-size="15">Current code: main · 7a0ed8b · 15 November 2026. Read each row from left to right.</text>
-<rect x="24" y="150" width="1392" height="235" rx="9" fill="#f8f4ea" stroke="#d0c9b8"/>
-<text x="46" y="184" class="label" font-size="14">01</text>
-<text x="88" y="185" class="serif" font-size="25">Detect &amp; decide</text>
-<text x="46" y="360" class="small" font-size="15">Snapshots go to Gemini Vision; the browser confirms twice. Away mode makes the event critical. Policy still decides whether to call.</text>
-<rect x="45" y="213" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="65" y="239" class="label" font-size="11">01</text>
-<text x="65" y="269" class="serif" font-size="23">Simulator camera</text>
-<text x="65" y="294" class="small" font-size="15">User starts camera; Home / Away</text>
-<text x="65" y="314" class="small" font-size="15">JPEG snapshot about every 2 s</text>
-<rect x="395" y="213" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="415" y="239" class="label" font-size="11">02</text>
-<text x="415" y="269" class="serif" font-size="23">Vision recognition</text>
-<text x="415" y="294" class="small" font-size="15">Web: /api/home/vision</text>
-<text x="415" y="314" class="small" font-size="15">Gemini returns recognized prop keys</text>
-<rect x="745" y="213" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="765" y="239" class="label" font-size="11">03</text>
-<text x="765" y="269" class="serif" font-size="23">Critical home event</text>
-<text x="765" y="294" class="small" font-size="15">POST /api/home → Supabase</text>
-<text x="765" y="314" class="small" font-size="15">Confirmed prop, button, or stove</text>
-<rect x="1095" y="213" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="1115" y="239" class="label" font-size="11">04</text>
-<text x="1115" y="269" class="serif" font-size="23">Scheduler → outreach</text>
-<text x="1115" y="294" class="small" font-size="15">Policy checks + atomic DB claim</text>
-<text x="1115" y="314" class="small" font-size="15">attemptId → /api/internal/outreach</text>
-<path class="edge" d="M345 272H387"/>
-<path class="edge" d="M695 272H737"/>
-<path class="edge" d="M1045 272H1087"/>
-<rect x="24" y="410" width="1392" height="235" rx="9" fill="#f8f4ea" stroke="#d0c9b8"/>
-<text x="46" y="444" class="label" font-size="14">02</text>
-<text x="88" y="445" class="serif" font-size="25">Place a FaceTime Video call</text>
-<text x="46" y="620" class="small" font-size="15">The web service prepares the room and calls Chert. The worker publishes audio before dialing; Jarvis greets after bridge_ready.</text>
-<rect x="45" y="473" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="65" y="499" class="label" font-size="11">05</text>
-<text x="65" y="529" class="serif" font-size="23">Outreach service</text>
-<text x="65" y="554" class="small" font-size="15">Create room + dispatch worker</text>
-<text x="65" y="574" class="small" font-size="15">Dial verified destination via Chert</text>
-<rect x="395" y="473" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="415" y="499" class="label" font-size="11">06</text>
-<text x="415" y="529" class="serif" font-size="23">Jarvis worker</text>
-<text x="415" y="554" class="small" font-size="15">Load focused event + allowed tools</text>
-<text x="415" y="574" class="small" font-size="15">Gemini Live handles conversation</text>
-<rect x="745" y="473" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="765" y="499" class="label" font-size="11">07</text>
-<text x="765" y="529" class="serif" font-size="23">LiveKit ↔ Chert</text>
-<text x="765" y="554" class="small" font-size="15">Room media ↔ FaceTime bridge</text>
-<text x="765" y="574" class="small" font-size="15">Call status returns to web + DB</text>
-<rect x="1095" y="473" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="1115" y="499" class="label" font-size="11">08</text>
-<text x="1115" y="529" class="serif" font-size="23">Mobile FaceTime</text>
-<text x="1115" y="554" class="small" font-size="15">User answers the video call</text>
-<text x="1115" y="574" class="small" font-size="15">Hear Jarvis; speak back naturally</text>
-<path class="edge" d="M345 532H387"/>
-<path class="edge" d="M695 532H737"/>
-<path class="edge" d="M1045 532H1087"/>
-<rect x="24" y="670" width="1392" height="235" rx="9" fill="#f8f4ea" stroke="#d0c9b8"/>
-<text x="46" y="704" class="label" font-size="14">03</text>
-<text x="88" y="705" class="serif" font-size="25">Relay the live home camera</text>
-<text x="46" y="880" class="small" font-size="15">While the call is active, /api/home/camera grants a one-room, camera-only publishing token. The camera browser cannot hear the call.</text>
-<rect x="45" y="733" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="65" y="759" class="label" font-size="11">09</text>
-<text x="65" y="789" class="serif" font-size="23">Simulator live stream</text>
-<text x="65" y="814" class="small" font-size="15">Camera on a laptop / second device</text>
-<text x="65" y="834" class="small" font-size="15">320px-wide video at 12 fps</text>
-<rect x="395" y="733" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="415" y="759" class="label" font-size="11">10</text>
-<text x="415" y="789" class="serif" font-size="23">LiveKit camera track</text>
-<text x="415" y="814" class="small" font-size="15">home-camera-… participant</text>
-<text x="415" y="834" class="small" font-size="15">Video only; no subscribe permission</text>
-<rect x="745" y="733" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="765" y="759" class="label" font-size="11">11</text>
-<text x="765" y="789" class="serif" font-size="23">Worker video relay</text>
-<text x="765" y="814" class="small" font-size="15">Re-publish on worker’s own track</text>
-<text x="765" y="834" class="small" font-size="15">Camera missing → animated horse</text>
-<rect x="1095" y="733" width="300" height="118" rx="9" fill="#fffdf6" stroke="#d0c9b8"/>
-<text x="1115" y="759" class="label" font-size="11">12</text>
-<text x="1115" y="789" class="serif" font-size="23">Mobile sees the feed</text>
-<text x="1115" y="814" class="small" font-size="15">Chert shows the worker’s video</text>
-<text x="1115" y="834" class="small" font-size="15">Camera live OR red critical horse</text>
-<path class="edge" d="M345 792H387"/>
-<path class="edge" d="M695 792H737"/>
-<path class="edge" d="M1045 792H1087"/>
-<rect x="24" y="930" width="1392" height="151" rx="9" fill="#e0e5da" stroke="#bfc8b8"/>
-<text x="46" y="962" class="label" font-size="12">THE RETURN PATH</text>
-<text x="46" y="998" class="serif" font-size="24">“Turn off the stove” → FaceTime → Chert → LiveKit → Jarvis / Gemini Live</text>
-<text x="46" y="1029" class="" font-size="18">Tool request → /api/internal/voice → owner-scoped Supabase update → saved result → spoken confirmation.</text>
-<text x="46" y="1059" class="small" font-size="15">The Simulator refreshes its state every 2 s. Turning off a device and acknowledging the alert are separate actions.</text>
-<text x="45" y="1116" class="" font-size="16">Two separate AI paths: Vision checks snapshots. Gemini Live handles audio and tools; it does not analyze the relayed video.</text>
-<text x="45" y="1147" class="small" font-size="14">Fallbacks: video refused → audio call • camera stale for 1.5 s → horse • devices are simulated • no application audio/video recording</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="820" viewBox="0 0 1440 820" role="img" aria-labelledby="title desc"><title id="title">Call Jarvis home-security product architecture</title><desc id="desc">Home cameras feed Call Jarvis, which detects critical events and calls the homeowner through Chert. The homeowner asks to see the live feed and continues the conversation through FaceTime.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#315e70"/></marker></defs><rect width="1440" height="820" fill="#eee9dd"/><style>text{font-family:Arial,Helvetica,sans-serif;fill:#203d4e}.serif{font-family:Georgia,serif}.small{fill:#5c6d72}.label{fill:#7d704c;letter-spacing:2px}.edge{fill:none;stroke:#315e70;stroke-width:2;marker-end:url(#arrow)}</style>
+<text x="40" y="48" font-size="13" class="label">CALL JARVIS · HOME SECURITY</text>
+<text x="40" y="98" font-size="39" class="serif">The intelligent bridge between your home and you.</text>
+<text x="40" y="134" font-size="19" class="small">Monitor the home. Call when it matters. Let the homeowner see and respond.</text>
+<rect x="40" y="235" width="280" height="166" rx="10" fill="#fffdf6" stroke="#c9c5b5"/>
+<text x="60" y="273" font-size="11" class="label">CAMERAS</text>
+<text x="60" y="313" font-size="25" class="serif">Home security system</text>
+<text x="60" y="348" font-size="16" class="small">Live camera feed</text>
+<text x="60" y="373" font-size="16" class="small">Activity in the house</text>
+<rect x="400" y="235" width="280" height="166" rx="10" fill="#e0e5da" stroke="#c9c5b5"/>
+<text x="420" y="273" font-size="11" class="label">INTELLIGENCE</text>
+<text x="420" y="313" font-size="25" class="serif">Call Jarvis</text>
+<text x="420" y="348" font-size="16" class="small">Process activity &amp; assess urgency</text>
+<text x="420" y="373" font-size="16" class="small">Initiate critical alerts</text>
+<rect x="760" y="235" width="280" height="166" rx="10" fill="#fffdf6" stroke="#c9c5b5"/>
+<text x="780" y="273" font-size="11" class="label">CONNECTION</text>
+<text x="780" y="313" font-size="25" class="serif">Chert</text>
+<text x="780" y="348" font-size="16" class="small">FaceTime connection</text>
+<text x="780" y="373" font-size="16" class="small">Two-way voice and video</text>
+<rect x="1120" y="235" width="280" height="166" rx="10" fill="#fffdf6" stroke="#c9c5b5"/>
+<text x="1140" y="273" font-size="11" class="label">MOBILE</text>
+<text x="1140" y="313" font-size="25" class="serif">Homeowner</text>
+<text x="1140" y="348" font-size="16" class="small">Mobile FaceTime app</text>
+<text x="1140" y="373" font-size="16" class="small">See the home and speak to Jarvis</text>
+<path class="edge" d="M320 322H392"/>
+<text x="321" y="300" font-size="12" class="small">Live feed</text>
+<path class="edge" d="M680 322H752" marker-start="url(#arrow)"/>
+<text x="681" y="300" font-size="12" class="small">Alert / feed</text>
+<path class="edge" d="M1040 322H1112" marker-start="url(#arrow)"/>
+<text x="1041" y="300" font-size="12" class="small">FaceTime</text>
+<path class="edge" d="M1260 401V459H540V401" stroke-dasharray="6 5"/>
+<text x="646" y="443" font-size="18" class="serif">“Show me the live feed” · homeowner request returns to Jarvis</text>
+<rect x="40" y="505" width="1360" height="215" rx="10" fill="#f8f4ea" stroke="#c9c5b5"/>
+<text x="64" y="547" font-size="12" class="label">01 · MONITOR</text>
+<text x="64" y="589" font-size="18" class="">Home camera activity</text>
+<text x="64" y="617" font-size="18" class="">is processed by Jarvis.</text>
+<text x="400" y="547" font-size="12" class="label">02 · ALERT</text>
+<text x="400" y="589" font-size="18" class="">Critical event → immediate</text>
+<text x="400" y="617" font-size="18" class="">FaceTime Video call via Chert.</text>
+<text x="736" y="547" font-size="12" class="label">03 · ASK</text>
+<text x="736" y="589" font-size="18" class="">The homeowner asks to</text>
+<text x="736" y="617" font-size="18" class="">see what is happening.</text>
+<text x="1072" y="547" font-size="12" class="label">04 · SEE &amp; RESPOND</text>
+<text x="1072" y="589" font-size="18" class="">Live home video is delivered</text>
+<text x="1072" y="617" font-size="18" class="">within the FaceTime conversation.</text>
+<text x="64" y="676" font-size="19" class="serif">Routine activity → continue monitoring. Critical activity → bring the homeowner into a conversation.</text>
+<text x="40" y="766" font-size="23" class="serif">Home camera → Call Jarvis intelligence → Chert connection → informed homeowner</text>
+<text x="40" y="796" font-size="13" class="small">Product architecture · Home-security use case</text>
 </svg>
