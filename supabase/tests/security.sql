@@ -1,0 +1,15 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(8);
+select is((select count(*)::integer from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity),0,'every public table has RLS');
+select ok(not has_function_privilege('anon','public.claim_escalation_attempt(jsonb)','execute'),'anonymous cannot claim');
+select ok(not has_function_privilege('authenticated','public.begin_notification_delivery(uuid)','execute'),'users cannot authorize sends');
+select ok(not has_schema_privilege('authenticated','private','usage'),'private helpers hidden');
+select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),0,'no public security-definer functions');
+set local role authenticated;
+set local request.jwt.claim.sub='22222222-2222-4222-8222-222222222222';
+select results_eq($$delete from public.reminders where user_id='11111111-1111-4111-8111-111111111111' returning id$$,$$select null::uuid where false$$,'cross-owner delete sees no rows');
+select throws_ok($$update public.reminders set user_id='11111111-1111-4111-8111-111111111111' where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3'$$,'42501',null,'owner cannot transfer records to another user');
+select is((select count(*)::integer from public.reminder_history),2,'history is owner isolated');
+select * from finish();
+rollback;
