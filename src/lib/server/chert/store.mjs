@@ -193,6 +193,15 @@ export function createSupabaseStore(env = process.env, fetchImpl = fetch) {
     releaseEvent(eventId) {
       return rest(env, fetchImpl, `provider_events?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" }).catch(() => {});
     },
+    /** Adds a line to the call log (communication_metadata). Best effort: it never fails the outreach. */
+    async logEvent(attempt, event, summary) {
+      await rest(env, fetchImpl, "communication_metadata", {
+        method: "POST",
+        prefer: "return=minimal",
+        body: { user_id: attempt.userId, attempt_id: attempt.id, channel: "facetime", provider_id: attempt.providerId ?? null, event,
+          metadata: { summary, direction: "outbound" } },
+      }).catch(() => {});
+    },
     async claimSend(attemptId) {
       const claim = await rest(env, fetchImpl, "rpc/begin_notification_delivery", {
         method: "POST",

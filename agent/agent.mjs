@@ -59,6 +59,8 @@ const agent = defineAgent({
       }),
     });
     ctx.addShutdownCallback(() => session.close());
+    // Closes the entry on the Logs page. Best effort: the client never throws.
+    if (voiceApi && loaded) ctx.addShutdownCallback(async () => { await voiceApi(call, 'session.end', {}, 3000); });
     // The avatar pulses while Jarvis is speaking.
     if (avatar) session.on('agent_state_changed', event => avatar.setSpeaking(event.newState === 'speaking'));
     // If the model goes quiet after a tool call, prompt it once to answer.

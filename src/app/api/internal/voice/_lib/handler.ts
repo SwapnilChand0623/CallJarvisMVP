@@ -7,6 +7,7 @@
 //
 // 200 { ok: true, result } · 422 { ok: false, error } for a refused action · 400/401/403/503 for request problems.
 import { buildContext, runAction } from "./actions";
+import { describeAction, describeReason } from "./call-log";
 import { ACTIONS } from "./contract";
 import { handleMessage } from "./message";
 import { validTimeZone } from "./time";
@@ -83,9 +84,22 @@ export function createVoiceHandler(config: VoiceConfig) {
     }
     if (!actor) return fail(403, "caller_not_verified", "This call is not linked to a verified user.");
 
+    // The call log is best effort: a failed write never fails the call.
+    const fields = body.call && typeof body.call === "object" ? (body.call as Record<string, unknown>) : {};
+    const attemptId = id(fields.attemptId);
+    const callId = id(fields.callId) ?? id(fields.room);
+    const direction = attemptId ? "outbound" as const : "inbound" as const;
+    const log = (event: string, summary: string) => {
+      if (!attemptId && !callId) return Promise.resolve();
+      return config.deps!.store.insertCallEvent(actor.userId, { attemptId, callId, event, summary, direction })
+        .catch((error) => console.error("[voice] call log write failed", error instanceof Error ? error.message : error));
+    };
+
     if (body.action === "session.start") {
       try {
-        return Response.json({ ok: true, result: { ...(await buildContext(config.deps, actor)), tools: ACTIONS } });
+        const context = await buildContext(config.deps, actor);
+        await log("call_started", direction === "outbound" ? describeReason(context) : "You called Jarvis.");
+        return Response.json({ ok: true, result: { ...context, tools: ACTIONS } });
       } catch (error) {
         console.error("[voice] context lookup failed", error instanceof Error ? error.message : error);
         return fail(503, "store_unavailable", "The user's context could not be loaded.");
@@ -98,7 +112,13 @@ export function createVoiceHandler(config: VoiceConfig) {
       const args = body.args && typeof body.args === "object" ? (body.args as Record<string, unknown>) : {};
       return Response.json({ ok: true, result: await handleMessage(config.deps, actor, args.text) });
     }
+    if (body.action === "session.end") {
+      await log("call_ended", "The call ended.");
+      return Response.json({ ok: true, result: {} });
+    }
     const outcome = await runAction(config.deps, actor, body.action, body.args);
+    const line = describeAction(body.action, outcome);
+    if (line) await log("action", line);
     return Response.json(outcome, { status: outcome.ok ? 200 : outcome.error.code === "write_failed" ? 502 : 422 });
   };
 }

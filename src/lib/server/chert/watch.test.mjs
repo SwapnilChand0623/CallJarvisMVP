@@ -9,6 +9,8 @@ function memory(attempt) {
   return {
     saves: [],
     async getAttempt() { return { ...row, greetingActivated: row.status === "answered" || row.status === "completed" }; },
+    lines: [],
+    async logEvent(current, event, summary) { this.lines.push([current.id, event, summary]); },
     async save(next) { row = { ...row, status: next.status, errorCode: next.errorCode ?? null, providerId: next.providerId }; this.saves.push(row.status); return row; },
   };
 }
@@ -66,6 +68,7 @@ test("the greeting starts once on bridge_ready and the call is recorded as compl
   assert.deepEqual(seen.greeted, [["cj-att1", "call-1"]]);
   assert.deepEqual(store.saves, ["answered", "completed"]);
   assert.deepEqual(seen.deleted, ["cj-att1"]);
+  assert.deepEqual(store.lines, [["att-1", "answered", "You answered."], ["att-1", "call_ended", "The call ended."]]);
 });
 
 test("a call that is never answered is recorded as unanswered with no greeting", async () => {
@@ -73,6 +76,7 @@ test("a call that is never answered is recorded as unanswered with no greeting",
   const { watch, seen } = watcher(store, [{}, { call: { id: "call-1", status: "missed" } }]);
   await watch(attempt);
   assert.deepEqual(seen.greeted, []);
+  assert.deepEqual(store.lines, [["att-1", "call_ended", "You did not answer."]]);
   assert.deepEqual(store.saves, ["unanswered"]);
 });
 

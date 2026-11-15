@@ -3,7 +3,7 @@
 //
 // Tables and columns follow docs/data-contract.md and the migration on codex/database. Revision bumps, reminder
 // history and cancellation of stale pending attempts are done by database triggers, never from here.
-import type { Attempt, Device, HomeEvent, HomeMode, Memory, Profile, Reminder, ReminderPatch, Store } from "./types";
+import type { Attempt, CallAttempt, CallEvent, Device, HomeEvent, HomeMode, Memory, Profile, Reminder, ReminderPatch, Store } from "./types";
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- untyped until database.ts lands
 
@@ -131,6 +131,47 @@ export function supabaseStore(url: string, serviceRoleKey: string, fetcher: type
     async acknowledgeHomeEvent(userId, id) {
       const [row] = await rest("PATCH", "home_events", `user_id=${eq(userId)}&id=${eq(id)}&select=*`, { acknowledged_at: new Date().toISOString() });
       return row ? homeEvent(row) : null;
+    },
+    async insertCallEvent(userId, event) {
+      await rest("POST", "communication_metadata", "select=id", {
+        user_id: userId, attempt_id: event.attemptId, channel: "facetime", provider_id: event.callId, event: event.event,
+        metadata: { summary: event.summary, direction: event.direction },
+      });
+    },
+    async listCallEvents(userId, limit) {
+      const rows = await rest("GET", "communication_metadata", `user_id=${eq(userId)}&channel=eq.facetime&order=occurred_at.desc&limit=${limit}`);
+      return rows.map((row): CallEvent => ({
+        at: new Date(row.occurred_at).toISOString(), attemptId: row.attempt_id ?? null, callId: row.provider_id ?? null, event: row.event,
+        summary: typeof row.metadata?.summary === "string" ? row.metadata.summary : "", direction: row.metadata?.direction === "outbound" ? "outbound" : "inbound",
+      }));
+    },
+    async listCallAttempts(userId, limit) {
+      const rows = await rest("GET", "notification_attempts",
+        `user_id=${eq(userId)}&channel=eq.facetime&order=created_at.desc&limit=${limit}&select=id,stage,status,error_code,simulated,created_at,outcome_at,reminder_id,home_event_id,check_in_id`);
+      // What each attempt was about, looked up per table and always scoped to the owner.
+      const lookup = async (table: string, column: string, select: string) => {
+        const ids = [...new Set(rows.map((row) => row[column]).filter(Boolean))];
+        if (!ids.length) return new Map<string, Row>();
+        const found = await rest("GET", table, `user_id=${eq(userId)}&id=in.(${ids.map(encodeURIComponent).join(",")})&select=id,${select}`);
+        return new Map(found.map((row) => [row.id as string, row]));
+      };
+      const [reminders, events, checkIns] = await Promise.all([
+        lookup("reminders", "reminder_id", "title,due_at,priority"),
+        lookup("home_events", "home_event_id", "description,occurred_at,severity"),
+        lookup("check_ins", "check_in_id", "due_at"),
+      ]);
+      return rows.map((row): CallAttempt => {
+        const reminder = reminders.get(row.reminder_id);
+        const event = events.get(row.home_event_id);
+        const checkIn = checkIns.get(row.check_in_id);
+        return {
+          id: row.id, stage: row.stage, status: row.status, errorCode: row.error_code ?? null, simulated: row.simulated === true,
+          createdAt: new Date(row.created_at).toISOString(), outcomeAt: row.outcome_at ? new Date(row.outcome_at).toISOString() : null,
+          about: reminder ? { kind: "reminder", text: reminder.title, at: reminder.due_at, priority: reminder.priority }
+            : event ? { kind: "home_event", text: event.description, at: event.occurred_at, priority: event.severity }
+            : checkIn ? { kind: "check_in", text: "", at: checkIn.due_at, priority: null } : null,
+        };
+      });
     },
     async setDeviceState(userId, deviceId, on) {
       const [row] = await rest("PATCH", "devices", `user_id=${eq(userId)}&id=${eq(deviceId)}&${permitted}&select=*`, { is_on: on });

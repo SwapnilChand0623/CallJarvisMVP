@@ -3,7 +3,7 @@ import Link from "next/link";
 import { TrojanHorse } from "./trojan-horse";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { House, BellRing, UserRound, ArrowUpRight, Radar } from "lucide-react";
+import { House, ScrollText, UserRound, ArrowUpRight, Radar } from "lucide-react";
 import { useAccount } from "./account-provider";
 export function Brand() {
   return (
@@ -70,7 +70,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <nav aria-label="Main navigation">
           {[
             { href: "/", label: "Home", icon: House },
-            { href: "/reminders", label: "Reminders", icon: BellRing },
+            { href: "/logs", label: "Logs", icon: ScrollText },
             { href: "/simulator", label: "Simulator", icon: Radar },
             { href: "/account", label: "Account", icon: UserRound },
           ].map(({ href, label, icon: Icon }) => (

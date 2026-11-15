@@ -297,3 +297,32 @@ test('endpoint: inboundMessage needs an attempt and acts for its owner', async (
   assert.equal(reply.body.result.reply, 'Marked done: Take evening medication.');
   assert.equal(store.data.reminders.find((item) => item.id === MEDS).status, 'completed');
 });
+
+test('call log: a call writes why it started, what was done and that it ended', async () => {
+  const { post, store } = endpoint();
+  const call = { callId: 'call-9', room: 'room-9' };
+  await post({ action: 'session.start', call });
+  await post({ action: 'createReminder', args: { title: 'Water the plants', dueLocal: '2026-11-16T09:00' }, call });
+  await post({ action: 'createReminder', args: { title: 'No time given' }, call }); // a question back, not a log line
+  await post({ action: 'saveMemory', args: { content: 'oat milk flat white', userConsented: true }, call });
+  await post({ action: 'session.end', call });
+  const lines = store.data.callEvents.filter((row) => row.callId === 'call-9');
+  assert.deepEqual(lines.map((row) => [row.event, row.direction, row.userId]), [
+    ['call_started', 'inbound', DEMO_USER_ID], ['action', 'inbound', DEMO_USER_ID], ['action', 'inbound', DEMO_USER_ID], ['call_ended', 'inbound', DEMO_USER_ID]]);
+  assert.equal(lines[2].summary, 'Saved a note for future calls.');
+  assert.equal(lines[0].summary, 'You called Jarvis.');
+  assert.match(lines[1].summary, /^Created the reminder “Water the plants”, due .+, medium priority\.$/);
+  assert.ok(!lines.some((row) => /oat milk/.test(row.summary)), 'a saved note is never repeated in the log');
+
+  // An outbound call is logged against its attempt, with the reason it was placed.
+  const outbound = endpoint({ demoUserId: '' });
+  await outbound.post({ action: 'session.start', call: { attemptId: ATTEMPT, room: 'room-10' } });
+  const [started] = outbound.store.data.callEvents;
+  assert.deepEqual([started.attemptId, started.direction], [ATTEMPT, 'outbound']);
+  assert.match(started.summary, /reminder “Take evening medication” was due/);
+
+  // A log write that fails never fails the call.
+  const broken = endpoint();
+  broken.store.insertCallEvent = async () => { throw new Error('down'); };
+  assert.equal((await broken.post({ action: 'session.start', call })).status, 200);
+});

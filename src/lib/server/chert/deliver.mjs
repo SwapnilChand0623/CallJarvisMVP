@@ -180,6 +180,7 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
       placed = true;
       const result = await facetime.create(attempt, { agentIdentity: prepared?.agentIdentity });
       const saved = await remember(store, attempt, result.kind, result.errorCode ?? null, result.providerId);
+      if (result.kind !== "failed") await store.logEvent?.(saved, "call_placed", "Jarvis started a FaceTime Audio call to you.");
       // Without a webhook, nothing else would tell the agent when FaceTime is ready to hear the greeting.
       if (watch && saved.providerId && result.kind !== "failed") watch(saved);
       return saved;
