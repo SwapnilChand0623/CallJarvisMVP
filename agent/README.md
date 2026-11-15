@@ -44,9 +44,31 @@ Set `GEMINI_API_KEY` in `.env.local` and run `npm run gemini:check` from this
 folder. The command sends one short text prompt to Gemini 4 Hydrogen and prints
 the reply. This check runs independently of FaceTime and LiveKit.
 
+## Voice actions
+
+Jarvis changes reminders and lights through the CallJarvis server, never
+directly. At the start of each call the worker sends the call's identifiers to
+`POST /api/internal/voice`; the server decides which user the call belongs to
+and returns that user's context and the tool list. The model cannot choose a
+user. See the [endpoint and tool contract](../src/app/api/internal/voice/README.md).
+
+Set `VOICE_API_URL` and `VOICE_TOOL_TOKEN` in `.env.local`. The token must match
+`VOICE_TOOL_TOKEN` on the server. Without them, or when the server refuses the
+call, Jarvis still talks but has no tools and says it cannot save anything.
+
+Run `npm test` for the worker's unit tests and `npm run test:e2e` to drive the
+worker's tools against the endpoint with fixture data. Neither needs keys.
+
+For a proactive call, the backend dispatches this agent with the metadata
+`{"calljarvis":{"direction":"outbound","attemptId":"…","bridgeIdentity":"…"}}`.
+The worker then opens its session at once, so its audio track is published
+before Chert dials, and stays silent. It greets when the backend writes
+`{"chert_bridge_ready":true}` into the room metadata, the same signal `chert dev`
+gives inbound calls.
+
 ## Change it
 
-Edit `instructions` and `greeting` at the top of `agent.mjs`. Keep the greeting
+Edit Jarvis's instructions and greeting in `prompt.mjs`. Keep the greeting
 to one short sentence. There is no automatic reload: end
 the call, stop `chert dev` with Ctrl+C, restart `npm start`, then run `chert dev`
 again. Otherwise a waiting room can still hold the old code.

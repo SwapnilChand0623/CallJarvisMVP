@@ -1,0 +1,221 @@
+// Authorized domain actions for voice and iMessage. Each runs for an Actor that trusted server code resolved;
+// nothing here accepts a user id from the caller's arguments. A result is ok only after the write succeeded.
+import { ACTION_NAMES } from "./contract";
+import { resolveDue, toLocal, toSpoken } from "./time";
+import type { ActionError, ActionResult, Actor, Deps, Priority, Reminder, ReminderPatch, ReminderStatus } from "./types";
+
+type Args = Record<string, unknown>;
+type Outcome = Record<string, unknown> | Failure;
+
+class Failure {
+  error: ActionError;
+  constructor(code: string, message: string, candidates?: ActionError["candidates"]) {
+    this.error = { code, message, ...(candidates ? { candidates } : {}) };
+  }
+}
+
+const PRIORITIES: Priority[] = ["low", "medium", "high", "critical"];
+const OPEN: ReminderStatus[] = ["pending", "snoozed"];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
+
+function view(reminder: Reminder, actor: Actor, now: Date) {
+  const due = new Date(reminder.dueAt);
+  return {
+    id: reminder.id,
+    title: reminder.title,
+    due: toSpoken(due, actor.timeZone),
+    dueLocal: toLocal(due, actor.timeZone),
+    priority: reminder.priority,
+    status: reminder.status,
+    acknowledged: reminder.acknowledgedAt !== null,
+    overdue: OPEN.includes(reminder.status) && due.getTime() < now.getTime(),
+  };
+}
+
+/** Finds one of the actor's open reminders by id, by title words, or from the call's own reminder. */
+async function findReminder(deps: Deps, actor: Actor, reference: unknown): Promise<Reminder | Failure> {
+  const wanted = text(reference, 200);
+  if (!wanted) {
+    if (!actor.focusReminderId) return new Failure("reminder_required", "Ask which reminder the user means, then pass its id or title.");
+    const focus = await deps.store.getReminder(actor.userId, actor.focusReminderId);
+    return focus ?? new Failure("reminder_not_found", "The reminder for this call no longer exists.");
+  }
+  if (UUID.test(wanted)) {
+    const exact = await deps.store.getReminder(actor.userId, wanted);
+    return exact ?? new Failure("reminder_not_found", "No reminder with that id belongs to this user.");
+  }
+  const open = await deps.store.listReminders(actor.userId, OPEN, 100);
+  const words = wanted.toLowerCase().split(" ");
+  const exactTitle = open.filter((item) => item.title.toLowerCase() === wanted.toLowerCase());
+  const matches = exactTitle.length ? exactTitle : open.filter((item) => words.every((word) => item.title.toLowerCase().includes(word)));
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) return new Failure("reminder_not_found", `No open reminder matches "${wanted}". Offer to list the open reminders.`);
+  return new Failure("reminder_ambiguous", "More than one reminder matches. Ask the user which one, then pass its id.",
+    matches.slice(0, 5).map((item) => ({ id: item.id, title: item.title, due: toSpoken(new Date(item.dueAt), actor.timeZone) })));
+}
+
+async function change(deps: Deps, actor: Actor, now: Date, reminder: Reminder, patch: ReminderPatch) {
+  const saved = await deps.store.updateReminder(actor.userId, reminder.id, patch);
+  return saved ? { reminder: view(saved, actor, now) } : new Failure("reminder_not_found", "The reminder no longer exists, so nothing changed.");
+}
+
+const closed = (reminder: Reminder) =>
+  OPEN.includes(reminder.status) ? null : new Failure("reminder_closed", `That reminder is already ${reminder.status}, so nothing changed.`);
+
+const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date) => Promise<Outcome>> = {
+  async listReminders(deps, actor, args, now) {
+    const filter = text(args.filter, 20) || "open";
+    if (!["open", "overdue", "today", "completed"].includes(filter)) return new Failure("invalid_arguments", "filter must be open, overdue, today or completed.");
+    const rows = await deps.store.listReminders(actor.userId, filter === "completed" ? ["completed"] : OPEN, 100);
+    const today = toLocal(now, actor.timeZone).slice(0, 10);
+    const kept = rows.filter((item) =>
+      filter === "overdue" ? Date.parse(item.dueAt) < now.getTime() :
+      filter === "today" ? toLocal(new Date(item.dueAt), actor.timeZone).slice(0, 10) === today : true);
+    kept.sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+    return { filter, total: kept.length, reminders: kept.slice(0, 10).map((item) => view(item, actor, now)) };
+  },
+
+  async createReminder(deps, actor, args, now) {
+    const title = text(args.title, 200);
+    if (!title) return new Failure("invalid_arguments", "Ask the user what the reminder is for.");
+    const priority = args.priority === undefined || args.priority === null ? "medium" : args.priority;
+    if (!PRIORITIES.includes(priority as Priority)) return new Failure("invalid_arguments", "priority must be low, medium, high or critical.");
+    const due = resolveDue(args, actor.timeZone, now);
+    if (!due.ok) return new Failure(due.code, due.message);
+    const saved = await deps.store.insertReminder(actor.userId, { title, dueAt: due.at.toISOString(), priority: priority as Priority });
+    return { reminder: view(saved, actor, now) };
+  },
+
+  async updateReminder(deps, actor, args, now) {
+    const reminder = await findReminder(deps, actor, args.reminder);
+    if (reminder instanceof Failure) return reminder;
+    const patch: ReminderPatch = {};
+    if (args.title !== undefined) {
+      const title = text(args.title, 200);
+      if (!title) return new Failure("invalid_arguments", "The new title is empty.");
+      patch.title = title;
+    }
+    if (args.priority !== undefined) {
+      if (!PRIORITIES.includes(args.priority as Priority)) return new Failure("invalid_arguments", "priority must be low, medium, high or critical.");
+      patch.priority = args.priority as Priority;
+    }
+    if (args.dueLocal !== undefined || args.dueInMinutes !== undefined) {
+      const due = resolveDue(args, actor.timeZone, now);
+      if (!due.ok) return new Failure(due.code, due.message);
+      // A new time is a new commitment: it becomes pending again and may notify again.
+      Object.assign(patch, { dueAt: due.at.toISOString(), status: "pending", acknowledgedAt: null });
+    }
+    if (Object.keys(patch).length === 0) return new Failure("invalid_arguments", "Nothing to change. Pass a title, priority or new time.");
+    if (reminder.status === "canceled" || (reminder.status === "completed" && !patch.dueAt)) return closed(reminder)!;
+    return change(deps, actor, now, reminder, patch);
+  },
+
+  async snoozeReminder(deps, actor, args, now) {
+    const reminder = await findReminder(deps, actor, args.reminder);
+    if (reminder instanceof Failure) return reminder;
+    const due = resolveDue(args, actor.timeZone, now);
+    if (!due.ok) return new Failure(due.code, due.message);
+    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "snoozed", dueAt: due.at.toISOString(), acknowledgedAt: null });
+  },
+
+  async acknowledgeReminder(deps, actor, args, now) {
+    const reminder = await findReminder(deps, actor, args.reminder);
+    if (reminder instanceof Failure) return reminder;
+    if (reminder.acknowledgedAt) return { reminder: view(reminder, actor, now), alreadyAcknowledged: true };
+    return closed(reminder) ?? change(deps, actor, now, reminder, { acknowledgedAt: now.toISOString() });
+  },
+
+  async completeReminder(deps, actor, args, now) {
+    const reminder = await findReminder(deps, actor, args.reminder);
+    if (reminder instanceof Failure) return reminder;
+    if (reminder.status === "completed") return { reminder: view(reminder, actor, now), alreadyCompleted: true };
+    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "completed" });
+  },
+
+  async cancelReminder(deps, actor, args, now) {
+    // Canceling never falls back to the call's reminder: the user must name it.
+    if (!text(args.reminder, 200)) return new Failure("reminder_required", "Ask which reminder to cancel, then pass its id or title.");
+    const reminder = await findReminder(deps, actor, args.reminder);
+    if (reminder instanceof Failure) return reminder;
+    return closed(reminder) ?? change(deps, actor, now, reminder, { status: "canceled" });
+  },
+
+  async getHomeStatus(deps, actor) {
+    const [devices, events] = await Promise.all([deps.store.listDevices(actor.userId), deps.store.listHomeEvents(actor.userId, 5)]);
+    return {
+      lights: devices.map((device) => ({ id: device.id, name: device.name, on: device.on })),
+      recentEvents: events.map((event) => ({
+        type: event.type, severity: event.severity, description: event.description,
+        when: toSpoken(new Date(event.occurredAt), actor.timeZone), simulated: event.source === "simulated",
+      })),
+    };
+  },
+
+  async controlLight(deps, actor, args) {
+    if (typeof args.on !== "boolean") return new Failure("invalid_arguments", "Ask whether the light should be on or off.");
+    const wanted = text(args.device, 100).toLowerCase();
+    if (!wanted) return new Failure("invalid_arguments", "Ask which light the user means.");
+    const devices = await deps.store.listDevices(actor.userId);
+    const byId = devices.filter((device) => device.id.toLowerCase() === wanted);
+    const matches = byId.length ? byId : devices.filter((device) => device.name.toLowerCase().includes(wanted) || wanted.includes(device.name.toLowerCase()));
+    if (matches.length === 0) return new Failure("device_not_found", "No authorized light matches. Call getHomeStatus to see the user's lights.");
+    if (matches.length > 1) return new Failure("device_ambiguous", `More than one light matches: ${matches.map((device) => device.name).join(", ")}. Ask which one.`);
+    const device = matches[0];
+    const outcome = await deps.home.setLight({ userId: actor.userId, deviceId: device.id, on: args.on, origin: actor.origin });
+    if (!outcome.ok) return new Failure("device_action_failed", `The light did not change: ${outcome.reason}. Tell the user it failed.`);
+    return { light: { id: device.id, name: device.name, on: outcome.on }, simulated: outcome.simulated };
+  },
+
+  async saveMemory(deps, actor, args) {
+    if (args.userConsented !== true) return new Failure("consent_required", "Nothing was saved. Ask the user whether to save this note, and only call again after a yes.");
+    const content = text(args.content, 300);
+    if (!content) return new Failure("invalid_arguments", "The note is empty.");
+    const saved = await deps.store.insertMemory(actor.userId, content);
+    return { memory: { id: saved.id, content: saved.content } };
+  },
+
+  async scheduleCheckIn(deps, actor, args, now) {
+    if (args.userConsented !== true) return new Failure("consent_required", "Nothing was scheduled. Ask the user whether they want this check-in, and only call again after a yes.");
+    const due = resolveDue(args, actor.timeZone, now);
+    if (!due.ok) return new Failure(due.code, due.message);
+    const saved = await deps.store.insertCheckIn(actor.userId, { dueAt: due.at.toISOString(), topic: text(args.topic, 200) || null });
+    return { checkIn: { id: saved.id, due: toSpoken(due.at, actor.timeZone) } };
+  },
+};
+
+/** Runs one contract action for the actor. Never throws: storage and provider failures come back as ok:false. */
+export async function runAction(deps: Deps, actor: Actor, name: string, args: unknown): Promise<ActionResult> {
+  const handler = ACTION_NAMES.includes(name) ? handlers[name] : undefined;
+  if (!handler) return { ok: false, error: { code: "unknown_action", message: `There is no action named ${name}.` } };
+  if (args !== undefined && args !== null && (typeof args !== "object" || Array.isArray(args))) {
+    return { ok: false, error: { code: "invalid_arguments", message: "Arguments must be an object." } };
+  }
+  try {
+    const outcome = await handler(deps, actor, (args ?? {}) as Args, deps.now?.() ?? new Date());
+    return outcome instanceof Failure ? { ok: false, error: outcome.error } : { ok: true, result: outcome };
+  } catch (error) {
+    console.error(`[voice] ${name} failed`, error instanceof Error ? error.message : error);
+    return { ok: false, error: { code: "write_failed", message: "The change could not be saved. Tell the user it did not go through and offer to try again." } };
+  }
+}
+
+/** What Jarvis may know at the start of a contact: the user's name, local time, open reminders and approved notes. */
+export async function buildContext(deps: Deps, actor: Actor) {
+  const now = deps.now?.() ?? new Date();
+  const [open, memories] = await Promise.all([
+    deps.store.listReminders(actor.userId, OPEN, 100),
+    deps.store.listMemories(actor.userId, 10),
+  ]);
+  open.sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+  const focus = actor.focusReminderId ? await deps.store.getReminder(actor.userId, actor.focusReminderId) : null;
+  return {
+    user: { name: actor.displayName, timeZone: actor.timeZone },
+    now: { local: toLocal(now, actor.timeZone), spoken: toSpoken(now, actor.timeZone) },
+    focusReminder: focus ? view(focus, actor, now) : null,
+    openReminders: open.slice(0, 10).map((item) => view(item, actor, now)),
+    openReminderCount: open.length,
+    savedNotes: memories.map((memory) => memory.content),
+  };
+}

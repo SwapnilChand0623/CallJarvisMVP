@@ -1,23 +1,40 @@
 import { fileURLToPath } from 'node:url';
 import { AutoSubscribe, defineAgent, voice } from '@livekit/agents';
 import { realtime } from '@livekit/agents-plugin-google';
+import { parseCallContext } from './call-context.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
+import { buildGreeting, buildInstructions } from './prompt.mjs';
+import { buildTools } from './tools.mjs';
+import { createVoiceApi } from './voice-api.mjs';
 
-// Change these instructions to build your own agent. Keep replies conversational.
-const instructions = `You are Jarvis, the CallJarvis AI assistant speaking over FaceTime.
-Help the caller clarify a task or reminder. Ask one question at a time and keep replies brief.
-This is a voice test. Be clear that you are an AI and never claim a reminder was saved.`;
-// Said once, as soon as FaceTime is ready. Keep it short: it is the first thing the caller hears.
-const greeting = 'Greet the caller in one short sentence: introduce yourself as Jarvis, an AI assistant, and ask how you can help.';
+// Jarvis's wording lives in prompt.mjs. The tools come from the server (VOICE_API_URL) at the start of each call.
+const voiceApi = createVoiceApi();
+if (!voiceApi) console.warn('[jarvis] VOICE_API_URL or VOICE_TOOL_TOKEN is not set: calls run without tools.');
+
+/** Loads what the server lets this caller see. Bounded so a slow server cannot delay the greeting. */
+async function startSession(call) {
+  if (!voiceApi) return null;
+  const started = await voiceApi(call, 'session.start', {}, 3000);
+  if (started.ok) return started.result;
+  console.warn(`[jarvis] no tools on this call: ${started.error.code}`);
+  return null;
+}
 
 const agent = defineAgent({
   entry: async ctx => {
     await ctx.connect(undefined, AutoSubscribe.AUDIO_ONLY);
-    // Chert prepares a room before a caller exists. Join promptly so Chert can
-    // find us, but wait before opening a paid model session. Doctor jobs may end
-    // without a caller ever joining.
-    const caller = await ctx.waitForParticipant();
+    const call = parseCallContext(ctx.job?.metadata, ctx.room?.name);
+    const context = startSession(call);
+    // Inbound: Chert prepares a room before a caller exists. Join promptly so Chert can find us, but wait for the
+    // caller before opening a paid model session. Doctor jobs may end without a caller ever joining.
+    // Outbound: Chert needs our audio track published before it dials, so the session opens first and stays silent
+    // until bridge_ready.
+    const identity = call.direction === 'outbound' ? call.bridgeIdentity : (await ctx.waitForParticipant()).identity;
+    const loaded = await context;
+    const instructions = buildInstructions(loaded);
+    const tools = loaded ? buildTools(loaded.tools, (action, args) => voiceApi(call, action, args)) : {};
+
     const session = new voice.AgentSession({
       llm: new realtime.RealtimeModel({
         apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
@@ -29,10 +46,10 @@ const agent = defineAgent({
     ctx.addShutdownCallback(() => session.close());
     await session.start({
       room: ctx.room,
-      agent: new voice.Agent({ instructions }),
+      agent: new voice.Agent({ instructions, tools }),
       record: false,
       inputOptions: {
-        participantIdentity: caller.identity,
+        ...(identity ? { participantIdentity: identity } : {}),
         audioEnabled: true,
         videoEnabled: false,
         textEnabled: false,
@@ -41,11 +58,11 @@ const agent = defineAgent({
       },
       outputOptions: { audioEnabled: true, transcriptionEnabled: false },
     });
-    // Greet once when chert dev reports that FaceTime is ready (bridge_ready in the
-    // room metadata): the Mac ends the call if it hears nothing within 10 seconds
-    // of that. Participant arrival alone is not readiness, so there is no greeting
-    // on it. Without the signal there is no greeting, and the caller speaks first.
-    const stopGreeting = greetOnBridgeReady(ctx.room, () => session.generateReply({ instructions: greeting }));
+    // Greet once when FaceTime is ready (chert_bridge_ready in the room metadata): the Mac ends the call if it hears
+    // nothing within 10 seconds of that. Participant arrival alone is not readiness, so there is no greeting on it.
+    // Without the signal there is no greeting, and the other side speaks first. For outbound calls the backend
+    // writes the same room metadata when Chert reports bridge_ready.
+    const stopGreeting = greetOnBridgeReady(ctx.room, () => session.generateReply({ instructions: buildGreeting(loaded, call) }));
     ctx.addShutdownCallback(async () => stopGreeting());
   },
 });
