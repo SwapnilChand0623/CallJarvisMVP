@@ -3,6 +3,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AudioLines,
+  House,
+  MessageCircle,
   LayoutDashboard,
   BellRing,
   Settings2,
@@ -12,7 +14,7 @@ import {
 import { useDemo } from "./demo-provider";
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
-  const { storageWarning } = useDemo();
+  const { storageWarning, state } = useDemo();
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -27,6 +29,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {[
             { href: "/", label: "Overview", icon: LayoutDashboard },
             { href: "/reminders", label: "JarvisRemind", icon: BellRing },
+            { href: "/home", label: "JarvisHome", icon: House },
+            { href: "/talks", label: "JarvisTalks", icon: MessageCircle },
             { href: "/settings", label: "Settings", icon: Settings2 },
           ].map(({ href, label, icon: Icon }) => (
             <Link
@@ -67,7 +71,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <span /> DEMO WORKSPACE
             </span>
             <span className="avatar" aria-label="Your profile">
-              S
+              {state.preferences.name.slice(0, 1).toUpperCase()}
             </span>
           </div>
         </header>

@@ -22,7 +22,7 @@ Jarvis asks what it can take off your mind. Let’s say: pick up my prescription
 
 [Type “Remind me to pick up my prescription in 30 minutes.” Review the interpreted task and time, then confirm. Navigate to JarvisRemind.]
 
-There it is, in the same place as the rest of your day. We can also create a reminder directly, set its priority, and choose a preferred communication channel in Settings. Once the task is done, one click acknowledges it.
+There it is, in the same place as the rest of your day. We can also create a reminder directly, set its priority, acknowledge it without completing it, snooze it, or reschedule it. Settings define your preferred channel, quiet hours, and outreach consent. Once the task is done, one click acknowledges it.
 
 [Complete the new reminder.]
 
@@ -30,9 +30,9 @@ The important idea is that the conversation ends with an action, not just an ans
 
 ## 1:55–2:30 — Beyond reminders
 
-[Return to Overview and simulate a home event.]
+[Open JarvisHome, confirm a simulated light change, and inject a home event.]
 
-We’re also exploring the same pattern for home activity. A simulated motion event appears in the feed. In the intended backend flow, relevant events can be evaluated and escalated through iMessage or FaceTime. That real event-to-call integration is separate from this local demo and should be shown only once it is connected and verified.
+We’re also exploring the same pattern for home activity. A simulated motion event appears in the history, and a confirmed light command changes the fixture state. JarvisTalks also lets users approve and delete saved context or opt into one-off simulated check-ins. In the intended backend flow, relevant events can be evaluated and escalated through iMessage or FaceTime. That real event-to-call integration is separate from this local demo and should be shown only once it is connected and verified.
 
 ## 2:30–3:00 — The vision
 

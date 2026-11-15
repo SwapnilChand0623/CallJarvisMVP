@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "./ui/button";
 import { useDemo } from "./demo-provider";
-import { makeReminder } from "@/lib/mockData";
+import { makeReminder, priorities, type Reminder } from "@/lib/mockData";
 export function ReminderForm({ onCreated }: { onCreated?: () => void }) {
   const { state, update } = useDemo();
   const [error, setError] = useState("");
@@ -18,7 +18,7 @@ export function ReminderForm({ onCreated }: { onCreated?: () => void }) {
           const reminder = makeReminder(
             String(data.get("title")),
             String(data.get("due")),
-            data.get("priority") === "high" ? "high" : "normal",
+            data.get("priority") as Reminder["priority"],
             state.preferences.channel,
           );
           update((s) => ({
@@ -31,6 +31,7 @@ export function ReminderForm({ onCreated }: { onCreated?: () => void }) {
                 detail: reminder.title,
                 time: new Date().toISOString(),
                 kind: "reminder",
+                reminderId: reminder.id,
               },
               ...s.activities,
             ],
@@ -59,9 +60,12 @@ export function ReminderForm({ onCreated }: { onCreated?: () => void }) {
         </label>
         <label>
           Priority
-          <select name="priority">
-            <option value="normal">Normal · a gentle nudge</option>
-            <option value="high">High · needs my attention</option>
+          <select name="priority" defaultValue="medium">
+            {priorities.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
           </select>
         </label>
       </div>

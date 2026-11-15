@@ -3,8 +3,12 @@ import { useRef, useState } from "react";
 import { AudioLines, Phone, X, Check } from "lucide-react";
 import { Button } from "./ui/button";
 import { useDemo } from "./demo-provider";
-import { parseReminderRequest } from "@/lib/parse-reminder";
-import { makeReminder } from "@/lib/mockData";
+import { makeReminder, formatTime } from "@/lib/mockData";
+import {
+  parseConversation,
+  type ConversationChange,
+} from "@/features/conversation";
+import { changeReminder } from "@/features/demo-actions";
 export function CallDemo() {
   const dialog = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<"intro" | "reply" | "confirm" | "done">(
@@ -13,9 +17,7 @@ export function CallDemo() {
   const [request, setRequest] = useState(
     "Remind me to pick up my prescription in 30 minutes",
   );
-  const [parsed, setParsed] = useState<ReturnType<
-    typeof parseReminderRequest
-  > | null>(null);
+  const [parsed, setParsed] = useState<ConversationChange | null>(null);
   const [error, setError] = useState("");
   const { state, update } = useDemo();
   return (
@@ -46,19 +48,21 @@ export function CallDemo() {
         </div>
         <h2 id="call-title">A conversation, not another notification.</h2>
         <p className="muted">
-          This guided demo shows the call-to-reminder flow. No call is placed
-          and no microphone is used.
+          Typed simulation with a limited parser. No call, microphone,
+          recording, or AI service is used.
         </p>
         <div className="chat-bubble">
           {stage === "done"
-            ? "You’re all set. I’ve added that reminder to your dashboard."
+            ? "Your confirmed change is saved in the local demo."
             : stage === "intro"
               ? "Hey! It’s Jarvis. What can I take off your mind?"
-              : "Got it. Tell me what you need and when you’d like a nudge."}
+              : stage === "confirm"
+                ? "Here’s what I understood. Does this look right?"
+                : "Create a reminder or ask me to acknowledge, complete, snooze, or reschedule one by its exact title."}
         </div>
         {stage === "intro" && (
           <Button onClick={() => setStage("reply")}>
-            I’d like to set a reminder
+            I’d like help with a reminder
           </Button>
         )}
         {stage === "reply" && (
@@ -67,7 +71,9 @@ export function CallDemo() {
             onSubmit={(e) => {
               e.preventDefault();
               try {
-                setParsed(parseReminderRequest(request, new Date()));
+                setParsed(
+                  parseConversation(request, state.reminders, new Date()),
+                );
                 setError("");
                 setStage("confirm");
               } catch (err) {
@@ -86,56 +92,63 @@ export function CallDemo() {
               />
             </label>
             <p id="request-help" className="muted small">
-              Type “Remind me to … in 30 minutes,” “in 2 hours,” or “in 1 day.”
-              This demo uses a limited text parser.
+              Examples: “Remind me to call Mom in 30 minutes,” “acknowledge Call
+              Mom,” “complete Call Mom,” or “snooze Call Mom for 15 minutes.”
             </p>
             {error && (
               <p role="alert" className="error">
                 {error}
               </p>
             )}
-            <Button type="submit">Review reminder</Button>
+            <Button type="submit">Review change</Button>
           </form>
         )}
         {stage === "confirm" && parsed && (
           <section aria-label="Review reminder" className="confirmation">
             <h3>{parsed.title}</h3>
             <p>
-              {new Date(parsed.dueAt).toLocaleString([], {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {parsed.kind === "create"
+                ? "Create reminder"
+                : parsed.description}{" "}
+              · {formatTime(parsed.dueAt, state.preferences.timeZone)}
             </p>
             <p className="muted small">
-              {state.preferences.channel} · Normal priority · Local demo
+              {parsed.kind === "create"
+                ? `${state.preferences.channel} · Medium priority`
+                : "Update selected reminder"}{" "}
+              · Local demo
             </p>
             <div className="save-row">
               <Button
                 onClick={() => {
-                  const r = makeReminder(
-                    parsed.title,
-                    parsed.dueAt,
-                    "normal",
-                    state.preferences.channel,
-                  );
-                  update((s) => ({
-                    ...s,
-                    reminders: [...s.reminders, r],
-                    activities: [
-                      {
-                        id: crypto.randomUUID(),
-                        title: "Demo conversation completed",
-                        detail: `Created reminder: ${r.title}`,
-                        time: new Date().toISOString(),
-                        kind: "call",
-                      },
-                      ...s.activities,
-                    ],
-                  }));
+                  if (parsed.kind === "create") {
+                    const r = makeReminder(
+                      parsed.title,
+                      parsed.dueAt,
+                      "medium",
+                      state.preferences.channel,
+                    );
+                    update((s) => ({
+                      ...s,
+                      reminders: [...s.reminders, r],
+                      activities: [
+                        {
+                          id: crypto.randomUUID(),
+                          title: "Demo conversation completed",
+                          detail: `Created reminder: ${r.title}`,
+                          time: new Date().toISOString(),
+                          kind: "call",
+                          reminderId: r.id,
+                        },
+                        ...s.activities,
+                      ],
+                    }));
+                  } else
+                    update((s) => changeReminder(s, parsed.id, parsed.action));
                   setStage("done");
                 }}
               >
-                Confirm reminder
+                Confirm change
               </Button>
               <Button variant="ghost" onClick={() => setStage("reply")}>
                 Edit request

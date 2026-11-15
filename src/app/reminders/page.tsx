@@ -10,7 +10,13 @@ export default function Reminders() {
   const [filter, setFilter] = useState("pending");
   const [notice, setNotice] = useState("");
   const reminders = state.reminders
-    .filter((r) => filter === "all" || r.status === filter)
+    .filter(
+      (r) =>
+        filter === "all" ||
+        (filter === "pending"
+          ? ["pending", "snoozed"].includes(r.status)
+          : r.status === filter),
+    )
     .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
   return (
     <>
@@ -49,7 +55,7 @@ export default function Reminders() {
         <div className="panel-heading">
           <h2>Your reminders</h2>
           <div className="filters" aria-label="Filter reminders">
-            {["pending", "completed", "all"].map((f) => (
+            {["pending", "completed", "canceled", "all"].map((f) => (
               <button
                 key={f}
                 aria-pressed={filter === f}
@@ -59,7 +65,9 @@ export default function Reminders() {
                   ? "Upcoming"
                   : f === "completed"
                     ? "Completed"
-                    : "All"}
+                    : f === "canceled"
+                      ? "Canceled"
+                      : "All"}
               </button>
             ))}
           </div>

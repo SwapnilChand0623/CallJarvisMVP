@@ -1,32 +1,28 @@
 # Frontend handoff
 
-Run `npm ci`, then `npm run dev` and open http://localhost:3000. Requires Node 22.13+.
+Node 22.13+ is required. Run `npm ci`, then `npm run dev`. The frontend's local fixtures require no credentials. The root package includes a local Node 22 runtime for npm scripts on older development hosts.
 
-Routes: `/` Overview, `/reminders` JarvisRemind, `/settings` preferences.
+## Pages and storage
 
-This is a browser-local demo. It never sends calls, messages, or sensor commands. The guided call creates a real local reminder, and parses a limited set of typed relative-time requests, but does not transcribe speech. There is no authentication or production backend yet. Browser storage holds sample data and should not contain sensitive information.
+- `/`: overview, upcoming reminders, home summary, activity, and simulated outreach history.
+- `/reminders`: create, edit, acknowledge, complete/reopen, snooze, cancel, reschedule, and inspect reminder history. Four priorities match the README. Acknowledgment is independent from lifecycle state.
+- `/home`: labeled camera/motion fixtures and an authorized fixture light with explicit confirmation and action outcome history.
+- `/talks`: style preferences, optional user-approved context, context deletion, and consent-based one-off simulated check-ins.
+- `/settings`: time zone, channel preferences, outreach opt-in, quiet hours, escalation delay, call cap, simulator disable, local history deletion, and clean-seed reset.
+- `/auth`: existing-account Supabase sign-in and a separate connected reminder workspace. Includes owner-filtered reads and mutations, record validation, edit/reschedule, acknowledgment, completion, snooze, deletion, session handling, Realtime subscription, and a polling fallback. Writes are confirmed only after the database returns success.
 
-## Demo sequence
+The five demo sections persist in browser storage under `calljarvis-demo-v2`; old v1 fixtures are not migrated because the shared reminder contract changed. No demo records are uploaded. Dates are stored as ISO UTC timestamps. Demo dates display in the configured IANA time zone; datetime inputs explicitly use the browser's local time.
 
-1. Open Overview. Point out the overdue medication reminder.
-2. Try a demo call, type “Remind me to call Mom in 30 minutes,” review the parsed reminder, and confirm it.
-3. Open JarvisRemind to see the new reminder; complete it with the checkbox.
-4. Return to Overview and simulate a home event. It appears in the activity feed.
-5. Change the preferred channel in Settings; new reminders use it.
-6. Reset sample data in Settings before presenting again.
+## Connected data setup and limits
 
-## Backend integration boundary
+Copy `.env.example` to `.env.local` and set the public Supabase URL and publishable key. Never expose service-role or provider credentials. The adapter in `src/lib/supabase/reminders.ts` uses the shared README reminder fields: `id`, `user_id`, `title`, `due_at`, `priority`, `status`, `acknowledged_at`. It validates returned records and rejects ownership mismatches, but these client checks are not a replacement for database RLS.
 
-`src/lib/mockData.ts` owns frontend types and deterministic seed generation. `src/components/demo-provider.tsx` owns loading, persistence, updates, and reset. Replace its local persistence with authenticated Supabase queries/subscriptions after the backend schema is agreed; avoid creating a competing schema from the frontend.
+Before using connected mode, the backend owner must land and apply owner-scoped RLS and the agreed schema, provision an existing test account, and enable Realtime publication if desired. An incompatible schema produces an error and retry state rather than switching silently to demo data. Polling refetches every 30 seconds and every mutation refetches immediately. Signed-out/account-changed sessions clear visible records and invalidate in-flight reads.
 
-Suggested mappings to agree with Swapnil: Reminder `id`, `title`, `dueAt` (ISO timestamp), `priority` (high/normal), `status` (pending/completed), and `channel` (FaceTime/iMessage); activity `id`, `title`, `detail`, `time`, and `kind`. These are frontend contracts, not a prescribed database schema. Set ownership and row-level security in the backend before connecting real data.
+No database migration or Supabase project configuration exists in main at implementation time. Consequently, connected CRUD is implemented against the README contract but has not been exercised against a live database. Profiles, verified contacts, persistent home records, memory, check-ins, and outreach still require their backend contracts and endpoints. They are explicit local simulations, not claimed as complete integrations. Do not enable production live data until two-user RLS checks pass.
 
-CallDemo is a guided simulation. Replace with the agreed LiveKit/Chert session flow only after server routes exist. Settings currently store preferences only; escalation is not implemented. Home events are sample feed entries, not sensor state. Keep credentials server-side. Frontend code does not touch `/agent`, `/supabase`, or API routes.
+Home Assistant and voice-worker services remain backend integration work. The frontend does not command real hardware. A typed conversation uses a deterministic grammar, not speech recognition or an AI service. It supports creation and exact-title acknowledgment, completion, snooze, and rescheduling, with review before save and clarification on duplicate names.
 
-## Verification
+## Validation
 
-`npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
-
-## Natural-language demo
-
-Supported requests follow `Remind me to <task> in <number> minutes/hours/days`, from one minute to thirty days. The demo asks for clarification when input does not match; it never guesses ambiguous dates. Users review the interpreted task, due time, and channel before saving. This is a deterministic parser, not an OpenAI integration.
+Run `npm run lint`, `npm test`, `npm run build -- --webpack`, and `npm run typecheck`. Webpack avoids macOS sandbox file-watcher and Turbopack port restrictions. Agent code inherited from main remains owned by the backend team.

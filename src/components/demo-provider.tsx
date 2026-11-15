@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { createDemoState, isDemoState, type DemoState } from "@/lib/mockData";
-const KEY = "calljarvis-demo-v1";
+const KEY = "calljarvis-demo-v2";
 const Context = createContext<{
   state: DemoState;
   update: (fn: (s: DemoState) => DemoState) => void;

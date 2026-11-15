@@ -6,7 +6,6 @@ import {
   BellRing,
   CheckCheck,
   ShieldCheck,
-  Activity,
   AudioLines,
   House,
   Phone,
@@ -15,14 +14,15 @@ import {
 import { useDemo } from "@/components/demo-provider";
 import { Button } from "@/components/ui/button";
 import { ReminderList } from "@/components/reminder-list";
+import { DeliveryHistory } from "@/components/delivery-history";
 import { CallDemo } from "@/components/call-demo";
 import { isOverdue } from "@/lib/mockData";
 export default function Overview() {
-  const { state, update, now } = useDemo();
+  const { state, now } = useDemo();
   const pending = state.reminders
-    .filter((r) => r.status === "pending")
+    .filter((r) => ["pending", "snoozed"].includes(r.status))
     .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
-  const overdue = pending.filter((r) => isOverdue(r, now));
+  const overdue = pending.filter((r) => isOverdue(r, now) && !r.acknowledgedAt);
   return (
     <>
       <div className="page-heading">
@@ -129,7 +129,7 @@ export default function Overview() {
           <div className="panel-heading">
             <div>
               <h2>Your home, at a glance</h2>
-              <p>A sample of a more connected day.</p>
+              <p>Simulated observations and explicit light commands.</p>
             </div>
             <House size={21} />
           </div>
@@ -138,38 +138,27 @@ export default function Overview() {
               <ShieldCheck size={31} />
             </span>
             <div>
-              <strong>All quiet on the home front</strong>
+              <strong>
+                {state.homeEvents.length
+                  ? "Recent observations available"
+                  : "No recent observations"}
+              </strong>
               <p>Simulated home status</p>
             </div>
           </div>
           <div className="home-metrics">
             <span>
-              Front door<strong>Locked</strong>
+              Observations<strong>{state.homeEvents.length} simulated</strong>
             </span>
             <span>
-              Living room<strong>Lights off</strong>
+              Living room
+              <strong>{state.light.on ? "Light on" : "Light off"}</strong>
             </span>
           </div>
-          <Button
-            variant="outline"
-            disabled={!state.preferences.homeAlerts}
-            onClick={() =>
-              update((s) => ({
-                ...s,
-                activities: [
-                  {
-                    id: crypto.randomUUID(),
-                    title: "Motion at the front door",
-                    detail: "Simulated security event · review your entryway.",
-                    time: new Date().toISOString(),
-                    kind: "home",
-                  },
-                  ...s.activities,
-                ],
-              }))
-            }
-          >
-            Simulate home event <Activity size={15} />
+          <Button asChild variant="outline">
+            <Link href="/home">
+              Open JarvisHome <ArrowRight size={15} />
+            </Link>
           </Button>
           {!state.preferences.homeAlerts && (
             <p className="small muted">
@@ -178,6 +167,7 @@ export default function Overview() {
           )}
         </section>
       </div>
+      <DeliveryHistory />
       <section className="panel activity-panel">
         <div className="panel-heading">
           <div>

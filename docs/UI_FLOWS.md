@@ -2,7 +2,7 @@
 
 ## Overview
 
-Open dashboard → load saved local state (or seed data) → inspect pending, completed, and overdue counts → complete a reminder, open JarvisRemind, or start a simulated call.
+Open dashboard → load validated local state (or clean v2 fixtures) → inspect pending, completed, and unacknowledged overdue counts → complete a reminder, open JarvisRemind, or start a simulated call.
 
 A clock refreshes overdue status every 30 seconds. Completion removes the item from pending counts; reopening is available in the completed list. Home-event simulation appends to the activity feed and respects the home-alert preference.
 
@@ -23,3 +23,9 @@ Edit display name and preferred channel → toggle escalation preference/home si
 ## Backend handoff
 
 Keep simulation labels until integrations are actually available. Replace the provider with authenticated queries and subscriptions against the agreed backend schema. Handle pending, failed, and retry states for writes before enabling real communications. API keys and user ownership enforcement belong on the server. No Supabase schema, credentials, or webhook contract is present in main yet, so the frontend currently runs in demo mode.
+
+## Expanded sections
+
+JarvisHome: confirm simulated light action → record outcome; inject labeled camera/motion observation → optionally preview policy. JarvisTalks: opt in → explicitly approve context or schedule one-off check-in → delete context/cancel check-in; disabling either consent deletes or cancels its records. Settings: validate time zone, channel opts, quiet hours, escalation delay and rolling call cap → save locally; deletion/reset require confirmation.
+
+Connected workspace: configure public Supabase project values after the schema and RLS land → sign in at /auth → load owner-filtered reminders → confirm database writes → refetch and subscribe/poll. Account changes clear visible data and invalidate pending reads. This connection does not upload local fixture data or connect simulated home/context records.

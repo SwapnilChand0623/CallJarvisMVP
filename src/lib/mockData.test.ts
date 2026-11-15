@@ -27,9 +27,9 @@ test("completed reminders never appear overdue", () => {
   );
 });
 test("creation validates title and date and preserves selected channel", () => {
-  assert.throws(() => makeReminder("  ", "invalid", "normal", "FaceTime"));
+  assert.throws(() => makeReminder("  ", "invalid", "medium", "FaceTime"));
   assert.throws(() =>
-    makeReminder("Call Mom", "invalid", "normal", "FaceTime"),
+    makeReminder("Call Mom", "invalid", "medium", "FaceTime"),
   );
   const r = makeReminder(
     " Call Mom ",
