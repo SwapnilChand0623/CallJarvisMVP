@@ -41,7 +41,7 @@ export function parseMessage(raw: string): Intent {
   if ((match = /^turn (on|off) (?:the )?(.+?)[.!]?$/.exec(text)) || (match = /^turn (?:the )?(.+?) (on|off)[.!]?$/.exec(text))) {
     const [first, second] = [match[1], match[2]];
     const on = first === "on" || second === "on";
-    return { action: "controlLight", args: { device: first === "on" || first === "off" ? second : first, on } };
+    return { action: "controlDevice", args: { device: first === "on" || first === "off" ? second : first, on } };
   }
   return null;
 }
@@ -59,7 +59,7 @@ function reply(action: string, outcome: ActionResult): string {
     case "createReminder": return `Saved: ${result.reminder.title}, ${result.reminder.due}.`;
     case "snoozeReminder": return `Snoozed ${result.reminder.title} until ${result.reminder.due}.`;
     case "completeReminder": return `Marked done: ${result.reminder.title}.`;
-    case "controlLight": return `${result.light.name} is ${result.light.on ? "on" : "off"}${result.simulated ? " (simulated)" : ""}.`;
+    case "controlDevice": return `${result.device.name} is ${result.device.on ? "on" : "off"}${result.simulated ? " (simulated)" : ""}.`;
     case "listReminders": return result.reminders.length
       ? result.reminders.map((item: { title: string; due: string }) => `${item.title}, ${item.due}`).join("\n")
       : "You have no open reminders.";

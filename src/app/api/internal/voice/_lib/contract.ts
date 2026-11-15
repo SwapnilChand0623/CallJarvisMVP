@@ -57,13 +57,23 @@ export const ACTIONS: ActionSpec[] = [
   },
   {
     name: "getHomeStatus",
-    description: "Read the user's authorized lights and recent home events. Event labels are observations, not confirmed facts.",
+    description: "Read whether the home is set to Home or Away, the user's authorized devices and recent home events. Event labels are observations, not confirmed facts.",
     parameters: { type: "object", properties: {} },
   },
   {
-    name: "controlLight",
-    description: "Turn one of the user's authorized lights on or off. Requires an explicit on or off request.",
-    parameters: { type: "object", properties: { device: { type: "string", description: "The light's id or name from getHomeStatus." }, on: { type: "boolean" } }, required: ["device", "on"] },
+    name: "controlDevice",
+    description: "Turn one of the user's authorized devices on or off, such as a light or the stove. Requires an explicit on or off request.",
+    parameters: { type: "object", properties: { device: { type: "string", description: "The device's id or name from getHomeStatus, for example 'porch light' or 'stove'." }, on: { type: "boolean" } }, required: ["device", "on"] },
+  },
+  {
+    name: "setHomeMode",
+    description: "Set the home to Away when the user is leaving, or Home when they are back. While Away, home events place a call.",
+    parameters: { type: "object", properties: { mode: { type: "string", enum: ["home", "away"] } }, required: ["mode"] },
+  },
+  {
+    name: "acknowledgeHomeEvent",
+    description: "Record that the user has heard about a home event. With no arguments it applies to the event this call is about, or the newest unacknowledged one. This stops follow-up contact about it.",
+    parameters: { type: "object", properties: {} },
   },
   {
     name: "saveMemory",

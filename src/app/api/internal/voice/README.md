@@ -51,8 +51,10 @@ role key, which bypasses RLS, so the filter is the isolation boundary.
 | `acknowledgeReminder` | `reminder?` | Sets `acknowledged_at`. Status is unchanged. |
 | `completeReminder` | `reminder?` | `completed`. `acknowledged_at` is unchanged. |
 | `cancelReminder` | `reminder` | `canceled`. Never defaults to the call's reminder. |
-| `getHomeStatus` | none | The owner's permitted lights and five latest events, with a simulated flag. |
-| `controlLight` | `device`, `on` | Calls the home service and reports its outcome. |
+| `getHomeStatus` | none | Home or Away, the owner's permitted devices and five latest events, with a simulated flag. |
+| `controlDevice` | `device`, `on` | Switches a permitted device (a light or the stove) through the home service and reports its outcome. |
+| `setHomeMode` | `mode` home or away | While Away, home events place a call. |
+| `acknowledgeHomeEvent` | none | Acknowledges the event the call is about, or the newest unacknowledged one. |
 | `saveMemory` | `content`, `userConsented` | Refused unless `userConsented` is `true`. |
 | `scheduleCheckIn` | one due field, `userConsented` | Refused unless `userConsented` is `true`. |
 
@@ -120,7 +122,7 @@ The Supabase store follows `docs/data-contract.md` on `codex/database`.
 
 ## Open dependencies
 
-- **Home service (Shishir's Codex).** `controlLight` goes through the
+- **Home service.** `controlDevice` goes through the
   `HomeService` port. Until `src/lib/server/home` exists, [`_lib/home.ts`](_lib/home.ts)
   changes a simulated light's stored state and logs it as `simulated`. It
   refuses a device whose `source` is `real`.

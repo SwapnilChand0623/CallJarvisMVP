@@ -142,3 +142,18 @@ test('avatar: critical means the call is about a critical reminder, or one is ov
   assert.equal(isCritical({ focusReminder: null, openReminders: [{ priority: 'critical', overdue: true }] }), true);
   assert.equal(isCritical({ focusReminder: null, openReminders: [{ priority: 'critical', overdue: false }, { priority: 'high', overdue: true }] }), false);
 });
+
+test('home events: the call names the event, offers the mapped action and shows as critical', () => {
+  const context = { user: { name: null, timeZone: 'America/Chicago' }, now: { local: '2026-11-15T12:00', spoken: 'Sunday, November 15 at 12:00 PM' },
+    focusReminder: null, openReminders: [], openReminderCount: 0, savedNotes: [],
+    focusEvent: { type: 'stove_on', severity: 'critical', description: 'The gas stove appears to be on while the home is set to Away', when: 'Sunday, November 15 at 11:59 AM', simulated: true, suggestion: 'Offer to turn the stove off.' },
+    home: { mode: 'away', devices: [{ name: 'Kitchen stove', kind: 'stove', on: true }, { name: 'Porch light', kind: 'light', on: false }] } };
+  const instructions = buildInstructions(context);
+  for (const expected of [/You placed this call about this home event: The gas stove appears to be on/, /from the home simulator/, /Offer to turn the stove off\./,
+    /call acknowledgeHomeEvent with no arguments/, /The home is set to Away\. Devices: Kitchen stove \(on\), Porch light \(off\)/]) assert.match(instructions, expected);
+  const greeting = buildGreeting(context, { direction: 'outbound' });
+  assert.match(greeting, /the gas stove appears to be on while the home is set to Away, according to the home simulator/);
+  assert.match(greeting, /Offer to turn the stove off\./);
+  assert.equal(isCritical(context), true);
+  assert.equal(isCritical({ ...context, focusEvent: { ...context.focusEvent, severity: 'low' } }), false);
+});

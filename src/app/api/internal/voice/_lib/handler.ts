@@ -42,18 +42,20 @@ export async function resolveActor(store: Store, call: unknown, config: Pick<Voi
   const fields = call && typeof call === "object" ? (call as Record<string, unknown>) : {};
   let userId = config.demoUserId;
   let focusReminderId: string | null = null;
+  let focusEventId: string | null = null;
   if (fields.attemptId !== undefined && fields.attemptId !== null) {
     const attemptId = id(fields.attemptId);
     const attempt = attemptId ? await store.getAttempt(attemptId) : null;
     if (!attempt) return null; // an unknown attempt never falls back to the demo user
     userId = attempt.userId;
     focusReminderId = attempt.reminderId;
+    focusEventId = attempt.homeEventId;
   }
   if (!userId) return null;
   const profile = await store.getProfile(userId);
   if (!profile) return null;
   const timeZone = validTimeZone(profile.timeZone) ? profile.timeZone : validTimeZone(config.defaultTimeZone) ? config.defaultTimeZone : "UTC";
-  return { userId, timeZone, displayName: profile.displayName, focusReminderId, origin };
+  return { userId, timeZone, displayName: profile.displayName, focusReminderId, focusEventId, origin };
 }
 
 export function createVoiceHandler(config: VoiceConfig) {
