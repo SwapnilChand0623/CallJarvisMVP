@@ -77,9 +77,9 @@ export default function Home() {
     <div className="home-content">
       <div className="home-heading">
         <div>
-          <span className="eyebrow">YOUR DAY, A LITTLE LIGHTER</span>
-          <h1>A little less on your mind.</h1>
-          <p>Tell Jarvis what to remember. Get on with your day.</p>
+          <span className="eyebrow">YOUR EVERYDAY ODYSSEY</span>
+          <h1>A clear course for your day.</h1>
+          <p>Tell Sir Jarvis what to remember. Let your day unfold.</p>
         </div>
         <Button asChild>
           <Link href="/reminders">
@@ -92,7 +92,7 @@ export default function Home() {
           <span className="call-label">
             <Phone size={15} /> A CONVERSATION AWAY
           </span>
-          <h2 id="call-title">Just call Jarvis.</h2>
+          <h2 id="call-title">Your navigator awaits.</h2>
           <p>
             Add a reminder, ask what’s next,
             <br />
@@ -125,7 +125,7 @@ export default function Home() {
               </>
             ) : (
               <p className="call-unavailable">
-                Your Jarvis line is being connected. You can still manage
+                Your Sir Jarvis line is being connected. You can still manage
                 reminders below.
               </p>
             )}

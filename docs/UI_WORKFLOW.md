@@ -24,11 +24,13 @@ Supabase’s phone-change flow is documented at https://supabase.com/docs/guides
 
 ## Validation
 
-- ESLint, TypeScript, production webpack build, and 21 unit tests.
+- ESLint, TypeScript, production webpack build, and 29 unit tests.
 - `supabase/tests/phone-onboarding.sql`: transactional tests against a test database. Covers anonymous access, forged metadata, unconfirmed or mismatched phones, consent, time zone validation, another account’s isolation, repeat completion, rollback when rule saving fails, and actual scheduler candidate → claim → send authorization resolving to the newly verified destination. No provider is contacted.
 - The migration and SQL checks were run locally in PostgreSQL via PGlite with an Auth-compatible fixture, including all repository migrations. They have not been applied to the hosted project by this UI task.
 - Browser checks use simulated Auth/SMS and the real migration/RPC in the local database. Hosted SMS delivery and live Chert calls require deployment and configured providers.
 
 ## Visual theme
 
-`src/app/theme.css` defines the navy/cyan palette. The supplied logo is preserved in `public/brand/calljarvis-logo.png`; CSS clips surrounding whitespace. `JarvisCore` supplies decorative, screen-reader-hidden rings using two slow CSS transform animations. Page reveals and control feedback are brief. Reduced-motion preferences disable motion; compact screens reduce the artwork.
+`src/app/theme.css` defines Sir Jarvis’s parchment, ocean ink, and antique brass palette. The original Trojan horse vector in `src/components/trojan-horse.tsx` is the shared logo; `src/app/icon.svg` is its browser icon. Classic system serif fonts keep headings and the wordmark crisp without an external font download. Forms keep readable sans-serif text.
+
+`OdysseyScene` draws an original, decorative vector voyage inspired by the supplied reference: a Greek ship, layered waves, rocky shores, a compass, and a small wooden horse. CSS transforms animate the ship, sail, waves, and horse. Distant lightning uses a slow opacity fade, never a rapid flash. Page reveals take 360–420 ms; controls respond in 160 ms. `prefers-reduced-motion` disables all motion. Mobile keeps a smaller scene while leaving controls readable. The existing Home, Reminders, Simulator, and Account navigation and verified-phone workflow remain available.

@@ -102,7 +102,7 @@ export default function Reminders() {
           <h1>
             One less thing to remember<span className="accent">.</span>
           </h1>
-          <p>Add it here, or give Jarvis a call.</p>
+          <p>Add it here, or give Sir Jarvis a call.</p>
         </div>
         <Button asChild variant="outline">
           <Link href="/">Back to home</Link>

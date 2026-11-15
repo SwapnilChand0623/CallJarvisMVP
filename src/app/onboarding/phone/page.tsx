@@ -56,7 +56,7 @@ export default function PhoneSetup() {
         <h1>
           {step === "phone" ? (
             <>
-              Where can Jarvis
+              Where can Sir Jarvis
               <br />
               reach you?
             </>
@@ -146,7 +146,8 @@ export default function PhoneSetup() {
                   required
                 />
                 <span>
-                  Allow Jarvis to call this number about my critical reminders.
+                  Allow Sir Jarvis to call this number about my critical
+                  reminders.
                 </span>
               </label>
             </>

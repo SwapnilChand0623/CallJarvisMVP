@@ -5,9 +5,9 @@ import { AccountProvider } from "@/components/account-provider";
 import "./globals.css";
 import "./theme.css";
 export const metadata: Metadata = {
-  title: "CallJarvis · A little more peace of mind",
+  title: "Sir Jarvis · A celestial navigator",
   description:
-    "Your proactive personal assistant. Reminders, home activity, and conversations in one place.",
+    "A celestial navigator for your everyday odyssey. Simple reminders and a personal assistant you can call.",
 };
 export default function RootLayout({
   children,
