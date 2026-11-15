@@ -22,17 +22,22 @@ export function bridgeReady(metadata) {
  * Returns a function that stops waiting.
  * @param {{ metadata?: string, on(event: string, listener: () => void): unknown, off(event: string, listener: () => void): unknown }} room
  * @param {() => unknown} greet
+ * @param {{ fallbackMs?: number }} [options]
  * @returns {() => void}
  */
-export function greetOnBridgeReady(room, greet) {
+export function greetOnBridgeReady(room, greet, { fallbackMs = 0 } = {}) {
   let done = false;
-  const stop = () => { done = true; room.off(METADATA_CHANGED, check); };
+  let timer;
+  const stop = () => { done = true; clearTimeout(timer); room.off(METADATA_CHANGED, check); };
+  const fire = () => { stop(); try { greet(); } catch { /* the call ended first */ } };
   function check() {
     if (done || !bridgeReady(room.metadata)) return;
-    stop();
-    try { greet(); } catch { /* the call ended first */ }
+    fire();
   }
   room.on(METADATA_CHANGED, check);
   check();
+  // With fallbackMs, greet anyway if the signal never arrives: a clipped greeting is better than a call the Mac
+  // drops for silence.
+  if (!done && fallbackMs > 0) timer = setTimeout(() => { if (!done) fire(); }, fallbackMs);
   return stop;
 }
