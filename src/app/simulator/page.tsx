@@ -134,7 +134,10 @@ export default function Simulator() {
         if (!alive) return;
         const code = err instanceof Error ? err.message : "";
         setLook(code === "vision_not_configured" ? "The camera can’t recognize props yet: GEMINI_API_KEY is not set on the server. Use the buttons below."
-          : code === "too_many_requests" || code === "vision_busy" ? "Watching (pausing briefly)." : "Watching. The last look failed; trying again.");
+          : code === "too_many_requests" ? "Watching (pausing briefly)."
+          : code === "vision_busy" ? "Watching. Gemini is busy right now; trying again."
+          : code === "vision_slow" ? "Watching. Gemini took too long to answer; trying again."
+          : "Watching. The last look failed; trying again.");
       } finally {
         lookingNow = false;
       }
