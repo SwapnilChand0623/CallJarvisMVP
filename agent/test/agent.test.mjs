@@ -5,6 +5,7 @@ import { buildGreeting, buildInstructions } from '../prompt.mjs';
 import { buildTools, toolReply } from '../tools.mjs';
 import { createVoiceApi } from '../voice-api.mjs';
 import { bridgeReady, greetOnBridgeReady } from '../greet.mjs';
+import { guardRepliesAfterTools } from '../reply-guard.mjs';
 import { HEIGHT, WIDTH, createAvatarState, isCritical, renderFrame } from '../avatar.mjs';
 
 test('call context: inbound from chert, outbound from dispatch metadata', () => {
@@ -156,4 +157,29 @@ test('home events: the call names the event, offers the mapped action and shows 
   assert.match(greeting, /Offer to turn the stove off\./);
   assert.equal(isCritical(context), true);
   assert.equal(isCritical({ ...context, focusEvent: { ...context.focusEvent, severity: 'low' } }), false);
+});
+
+test('reply guard: prompts once when the model stays silent after a tool, and not when it speaks', async () => {
+  const listeners = {};
+  const prompts = [];
+  const session = { on: (name, fn) => { (listeners[name] ??= []).push(fn); }, generateReply: options => prompts.push(options.instructions) };
+  const emit = (name, event) => (listeners[name] ?? []).forEach(fn => fn(event));
+  const logs = [];
+  guardRepliesAfterTools(session, { waitMs: 30, log: line => logs.push(line) });
+
+  emit('function_tools_executed', { functionCalls: [{ name: 'getHomeStatus' }] });
+  emit('agent_state_changed', { newState: 'speaking' });
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(prompts.length, 0, 'the model answered, so no prompt');
+
+  emit('function_tools_executed', { functionCalls: [{ name: 'getHomeStatus' }] });
+  emit('agent_state_changed', { newState: 'thinking' });
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(prompts.length, 1);
+  assert.match(logs[0], /no reply .* after getHomeStatus/);
+
+  emit('function_tools_executed', { functionCalls: [] });
+  emit('close', {});
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(prompts.length, 1, 'nothing after the call ends');
 });
