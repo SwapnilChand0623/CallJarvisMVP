@@ -5,7 +5,16 @@
 export function summarizeLine(item) {
   const readiness = item?.session_health?.readiness ?? {};
   const caps = item?.session_health?.capabilities ?? {};
-  const audioReady = readiness.audio_ready === true;
+  // Current workers defer system audio capture until a call starts. The
+  // production-media verdict can pass while the legacy audio flag is false.
+  const checks = readiness.automatic?.checks;
+  const deferredCapture = Array.isArray(checks) && checks.some((check) =>
+    check.id === "system_audio_capture" && check.outcome === "at_call_start");
+  const audioReady = readiness.audio_ready === true || (
+    readiness.production_media_ready === true && deferredCapture &&
+    checks.every((check) => check.outcome === "passed" ||
+      (check.id === "system_audio_capture" && check.outcome === "at_call_start"))
+  );
   const outbound = Number(caps.outbound_audio_protocol) >= 1;
   const supportsAudio = item?.supports_audio === true;
   const available = item?.operational_status === "available" && item?.worker_occupied !== true && item?.status !== "offline";

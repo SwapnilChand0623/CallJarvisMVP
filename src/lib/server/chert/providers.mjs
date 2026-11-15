@@ -49,14 +49,14 @@ export function bridgeToken({ apiKey, apiSecret, identity, room, ttlSeconds = 36
   }, apiSecret);
 }
 
-function adminToken(env) {
+function adminToken(env, room) {
   const now = Math.floor(Date.now() / 1000);
   return signJwt({
     iss: env.LIVEKIT_API_KEY,
     sub: "calljarvis-outreach",
     nbf: now,
     exp: now + 600,
-    video: { roomCreate: true, roomAdmin: true, roomList: true },
+    video: { roomCreate: true, roomAdmin: true, roomList: true, ...(room ? { room } : {}) },
   }, env.LIVEKIT_API_SECRET);
 }
 
@@ -67,7 +67,7 @@ function liveKitHttp(url) {
 async function twirp(env, fetchImpl, service, method, body) {
   const response = await fetchImpl(`${liveKitHttp(env.LIVEKIT_URL)}/twirp/livekit.${service}/${method}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${adminToken(env)}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${adminToken(env, body.room)}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(4000),
   });

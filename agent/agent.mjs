@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { AutoSubscribe, defineAgent, voice } from '@livekit/agents';
 import { realtime } from '@livekit/agents-plugin-google';
+import { TrackPublishOptions, TrackSource } from '@livekit/rtc-node';
+import { publishDemoCamera } from './camera.mjs';
 import { parseCallContext } from './call-context.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
@@ -30,6 +32,13 @@ const agent = defineAgent({
     // caller before opening a paid model session. Doctor jobs may end without a caller ever joining.
     // Outbound: Chert needs our audio track published before it dials, so the session opens first and stays silent
     // until bridge_ready.
+    if (call.direction === 'inbound' && process.env.JARVIS_VIDEO === '1') {
+      try {
+        await publishDemoCamera(ctx);
+      } catch (error) {
+        console.warn('[jarvis] demo camera unavailable:', error instanceof Error ? error.message : String(error));
+      }
+    }
     const identity = call.direction === 'outbound' ? call.bridgeIdentity : (await ctx.waitForParticipant()).identity;
     const loaded = await context;
     const instructions = buildInstructions(loaded);
@@ -44,6 +53,26 @@ const agent = defineAgent({
       }),
     });
     ctx.addShutdownCallback(() => session.close());
+    if (call.direction === 'outbound') {
+      // RoomIO waits for the caller before publishing its default audio output.
+      // Chert needs the track before dialing, so publish the session's output now.
+      const output = new voice.ParticipantAudioOutput(ctx.room, {
+        sampleRate: 24000,
+        numChannels: 1,
+        queueSizeMs: 200,
+        trackPublishOptions: new TrackPublishOptions({ source: TrackSource.SOURCE_MICROPHONE }),
+      });
+      const publishing = new AbortController();
+      session.output.audio = output;
+      ctx.addShutdownCallback(async () => {
+        publishing.abort();
+        await output.close();
+      });
+      // start() publishes the track and then waits for Chert to subscribe.
+      void output.start(publishing.signal).catch(error => {
+        if (!publishing.signal.aborted) console.error('[jarvis] outbound audio publish failed:', error);
+      });
+    }
     await session.start({
       room: ctx.room,
       agent: new voice.Agent({ instructions, tools }),

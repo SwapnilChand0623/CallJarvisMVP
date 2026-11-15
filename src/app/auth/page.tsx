@@ -17,6 +17,7 @@ export default function Auth() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const generation = useRef(0);
@@ -130,20 +131,37 @@ export default function Auth() {
       ) : !user ? (
         <section className="panel settings-panel">
           <div className="panel-heading">
-            <h2>Sign in to your existing account</h2>
+            <h2>{creatingAccount ? "Create your account" : "Sign in to your existing account"}</h2>
           </div>
           <form
             className="reminder-form"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               const d = new FormData(e.currentTarget);
-              void mutate(async () => {
-                const { error } = await client.auth.signInWithPassword({
-                  email: String(d.get("email")),
+              setBusy(true);
+              setError("");
+              setNotice("");
+              try {
+                const credentials = {
+                  email: String(d.get("email")).trim(),
                   password: String(d.get("password")),
-                });
-                if (error) throw error;
-              });
+                };
+                if (creatingAccount) {
+                  const { data, error } = await client.auth.signUp(credentials);
+                  if (error) throw error;
+                  setNotice(data.session
+                    ? "Account created. You’re signed in."
+                    : "Check your email to confirm your account, then return here to sign in.");
+                } else {
+                  const { error } = await client.auth.signInWithPassword(credentials);
+                  if (error) throw error;
+                  setNotice("Signed in.");
+                }
+              } catch (err) {
+                setError((err as Error).message);
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             <label>
@@ -160,12 +178,20 @@ export default function Auth() {
               <input
                 type="password"
                 name="password"
-                autoComplete="current-password"
+                autoComplete={creatingAccount ? "new-password" : "current-password"}
+                minLength={creatingAccount ? 6 : undefined}
                 required
               />
             </label>
             <Button disabled={busy} type="submit">
-              {busy ? "Signing in…" : "Sign in"}
+              {busy ? (creatingAccount ? "Creating account…" : "Signing in…") : (creatingAccount ? "Create account" : "Sign in")}
+            </Button>
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => {
+              setCreatingAccount(!creatingAccount);
+              setError("");
+              setNotice("");
+            }}>
+              {creatingAccount ? "Already have an account? Sign in" : "New here? Create an account"}
             </Button>
           </form>
         </section>
@@ -416,8 +442,9 @@ export default function Auth() {
         <div className="notice error" role="alert">
           {error}
           <p>
-            Check the database contract and your account access, then retry.
-            Local demo data is never uploaded automatically.
+            {user
+              ? "Could not load or save your reminders. Please retry. Local demo data is never uploaded automatically."
+              : "Check your email and password. If you’re new here, choose Create an account. If you already signed up, confirm your email before signing in."}
           </p>
         </div>
       )}

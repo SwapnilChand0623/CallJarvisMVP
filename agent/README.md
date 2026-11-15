@@ -38,6 +38,17 @@ application built on LiveKit Agents and Gemini 3.8 Live. Node 22.23.2 or later, 
 `chert doctor` checks sign-in, keys, the line and the Mac behind it.
 `chert doctor --agent NAME` also sends the agent a real test job.
 
+For Jarvis's animated teal avatar, set `JARVIS_VIDEO=1` in `.env.local`, restart
+the agent and `chert dev`, then call the line using **FaceTime Video**. The agent
+publishes its camera before waiting for the caller. Caller-camera input stays
+disabled. Outbound reminder callbacks currently use audio only.
+
+When testing callbacks on the same line, end the inbound call and stop
+`chert dev` to release the line. Keep the agent, app, and scheduler running.
+Temporary readiness failures leave the callback pending for a later retry.
+The account's daily call limit also applies; currently simulated attempts count
+toward that limit.
+
 ## Test the Gemini Interactions API
 
 Set `GEMINI_API_KEY` in `.env.local` and run `npm run gemini:check` from this

@@ -135,10 +135,20 @@ export function createDeliver({ store, livekit, facetime, imessage, capabilities
       claimed.userId !== fresh.userId) return finish(fresh);
     const outbound = {
       ...fresh,
+      simulated: false,
       destination: normalizeHandle(claimed.destination),
       idempotencyKey: claimed.idempotencyKey,
     };
     if (!channelLive(caps, outbound.channel)) {
+      const reason = caps[outbound.channel]?.reason;
+      const temporary = ["audio_not_ready", "line_unavailable", "probe_failed"].includes(reason)
+        || /^facetime_http_(429|5\d\d)$/.test(reason ?? "");
+      if (temporary) {
+        const pending = { ...outbound, status: "pending", providerId: null,
+          errorCode: reason, leaseUntil: null };
+        await store.save(pending);
+        return finish(pending);
+      }
       const simulated = {
         ...outbound,
         status: "simulated",

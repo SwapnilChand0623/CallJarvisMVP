@@ -527,3 +527,38 @@ test("a verified sender with no outreach history can get one text reply", async 
   assert.match(replies[0].key, /^cj-text-[a-f0-9]{64}$/);
   assert.equal(replies[0].body, "You have no open reminders.");
 });
+
+test("production-ready lines may defer capture until call start, but failures stay blocked", () => {
+  const line = { supports_audio: true, operational_status: "available", session_health: {
+    capabilities: { outbound_audio_protocol: 1 }, readiness: { audio_ready: false,
+      production_media_ready: true, automatic: { checks: [
+        { id: "system_audio_capture", outcome: "at_call_start" },
+        { id: "audio_devices", outcome: "passed" },
+      ] } },
+  } };
+  assert.equal(summarizeLine(line).live, true);
+  line.session_health.readiness.automatic.checks[1].outcome = "failed";
+  assert.equal(summarizeLine(line).live, false);
+  line.session_health.readiness.automatic.checks[1].outcome = "passed";
+  line.session_health.readiness.production_media_ready = false;
+  assert.equal(summarizeLine(line).live, false);
+});
+
+test("a temporarily unavailable line retries the same attempt and sends once after recovery", async () => {
+  const store = storeWith({ simulated: true });
+  const { services, calls } = harness(store, { live: true });
+  let ready = false;
+  services.capabilities = async () => ({ ...caps(ready), facetime: { live: ready, reason: ready ? "ready" : "line_unavailable" } });
+  const deliver = createDeliver(services);
+  await deliver("att-1");
+  const pending = await store.getAttempt("att-1");
+  assert.equal(pending.status, "pending");
+  assert.equal(pending.errorCode, "line_unavailable");
+  assert.equal(pending.simulated, false);
+  assert.equal(calls.create, 0);
+  ready = true;
+  await deliver("att-1");
+  await deliver("att-1");
+  assert.equal(calls.create, 1);
+  assert.equal((await store.getAttempt("att-1")).status, "accepted");
+});
