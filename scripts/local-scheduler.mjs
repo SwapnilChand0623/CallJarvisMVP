@@ -7,6 +7,7 @@
 //   npm run scheduler      (terminal 2)
 import { createHandler } from "../supabase/functions/escalate/handler.ts";
 import { serverEnv, supabase } from "./env.mjs";
+import { liveCallQuery, nextForLine } from "../src/lib/server/chert/line.mjs";
 
 const env = serverEnv();
 for (const name of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "OUTREACH_TOKEN"]) {
@@ -18,9 +19,22 @@ const rest = supabase(env);
 const rpc = (name, body) => rest(`rpc/${name}`, { method: "POST", body });
 const stamp = () => new Date().toLocaleTimeString();
 
+let lastHold = "";
 const tick = createHandler({
   token: "local",
-  candidates: () => rpc("list_escalation_candidates", { p_limit: 20 }),
+  // The line carries one call: hand over one due item at a time, and none while a call is ringing or in progress.
+  // Whatever is held back stays due and goes out on a later tick.
+  candidates: async () => {
+    const due = await rpc("list_escalation_candidates", { p_limit: 20 });
+    if (!due.length) return due;
+    const busy = (await rest(liveCallQuery())).length > 0;
+    const next = nextForLine(due, busy);
+    const held = due.length - next.length;
+    const note = busy ? `line busy: holding ${held} due item(s) until the call ends` : held ? `one call at a time: holding ${held} more due item(s)` : "";
+    if (note && note !== lastHold) console.log(`${stamp()}  ${note}`);
+    lastHold = note;
+    return next;
+  },
   claim: (job) => rpc("claim_escalation_attempt", { p_job: job }),
   outreach: async (attemptId) => {
     const response = await fetch(new URL("/api/internal/outreach", origin), {

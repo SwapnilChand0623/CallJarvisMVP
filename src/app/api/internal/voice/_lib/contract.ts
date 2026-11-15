@@ -87,7 +87,7 @@ export const ACTIONS: ActionSpec[] = [
   },
   {
     name: "scheduleCheckIn",
-    description: "Schedule a one-off call back from Jarvis at a set time, for requests such as 'call me back in ten minutes' or 'check in on me tonight'. Jarvis calls the user then. Only after the user has explicitly asked for or agreed to it. Pass exactly one of dueLocal or dueInMinutes. To be reminded about a task, use createReminder instead.",
+    description: "Schedule a one-off call back from Jarvis at a set time, for requests such as 'call me back in ten minutes' or 'check in on me tonight'. Jarvis calls the user then. Only after the user has explicitly asked for or agreed to it. Pass exactly one of dueLocal or dueInMinutes. To be reminded about a task, use createReminder instead, and never call both for one request: a critical reminder already makes Jarvis call.",
     parameters: { type: "object", properties: { dueLocal, dueInMinutes, userConsented: { type: "boolean", description: "True only if the user asked for or said yes to this call back." } }, required: ["userConsented"] },
   },
 ];

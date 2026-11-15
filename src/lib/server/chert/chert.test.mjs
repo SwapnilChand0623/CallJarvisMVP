@@ -610,3 +610,16 @@ test("when the line refuses a video call, the alert goes out as an audio call", 
   assert.equal(result.body.providerId, "call-audio");
   assert.equal((await store.getAttempt("att-1")).status, "accepted");
 });
+
+test("the scheduler places one call at a time on the line", async () => {
+  const { liveCallQuery, nextForLine, LIVE_CALL_WINDOW_MS } = await import("./line.mjs");
+  const due = [{ id: "reminder-1" }, { id: "check-in-1" }];
+  assert.deepEqual(nextForLine(due, false), [{ id: "reminder-1" }], "two items due together go out one after the other");
+  assert.deepEqual(nextForLine(due, true), [], "nothing is placed while a call is ringing or in progress");
+  assert.deepEqual(nextForLine([], false), []);
+  const now = Date.UTC(2026, 10, 15, 18, 0, 0);
+  const query = liveCallQuery(now);
+  assert.match(query, /channel=eq\.facetime/);
+  assert.match(query, /status=in\.\(sending,accepted,answered\)/);
+  assert.ok(query.includes(encodeURIComponent(new Date(now - LIVE_CALL_WINDOW_MS).toISOString())), "a stale call stops blocking after the window");
+});
