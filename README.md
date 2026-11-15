@@ -59,3 +59,18 @@ npm run start
 2. User can create a reminder via natural language over a simulated/real FaceTime call.
 3. Supabase Cron job detects an unacknowledged priority task.
 4. CallJarvis initiates an outbound FaceTime call (or iMessage) to resolve it.
+
+## Frontend demo (Shishir)
+
+The frontend is now scaffolded at the repository root using Next.js App Router, TypeScript, Tailwind CSS, and a shadcn-style Button primitive. Requires Node.js 22.13+.
+
+```bash
+npm ci
+npm run dev
+```
+
+Open http://localhost:3000. Overview, JarvisRemind, and Settings work with realistic browser-local mock data. The call demo accepts typed requests such as “Remind me to call Mom in 30 minutes” and asks for confirmation before saving. The call flow and home events are explicitly simulated; no real FaceTime calls or iMessages are sent. Backend/agent setup above describes planned integration work and will work once those directories are supplied by their owner.
+
+See [frontend handoff](docs/FRONTEND_HANDOFF.md) for demo steps and integration boundaries, and [pitch script](docs/PITCH.md) for the three-minute presentation.
+
+Validation: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
