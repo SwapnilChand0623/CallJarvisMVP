@@ -311,7 +311,7 @@ export default function Simulator() {
         {watching && onCall && <p className="sim-live" role="status"><span aria-hidden />Live on the call: Jarvis is showing this camera on FaceTime.</p>}
         <p className="sim-hint" role="status">{look}</p>
         <p className="sim-small">Frames are sent to Gemini to check for the props below, and are not stored. A prop counts after two looks in a row.</p>
-        <p className="sim-small">When Jarvis calls about a critical alert, it is a FaceTime Video call that shows this camera live while it is on. Run the camera on a different device from the phone that takes the call: a phone pauses its camera when FaceTime rings.</p>
+        <p className="sim-small">When Jarvis calls about a critical alert, it is a FaceTime Video call that shows this camera live while it is on. On a FaceTime Video call you place, ask Jarvis to show the camera. Run the camera on a different device from the phone that takes the call: a phone pauses its camera when FaceTime rings.</p>
       </section>
 
       <section className="sim-card">

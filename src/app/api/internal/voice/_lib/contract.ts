@@ -71,6 +71,11 @@ export const ACTIONS: ActionSpec[] = [
     parameters: { type: "object", properties: { mode: { type: "string", enum: ["home", "away"] } }, required: ["mode"] },
   },
   {
+    name: "showCamera",
+    description: "Put the live home camera on this FaceTime Video call, or take it off again. Use it when the user asks to see the camera, the kitchen or the house. The picture appears a few seconds later if the home camera is switched on. You cannot see the video yourself.",
+    parameters: { type: "object", properties: { show: { type: "boolean", description: "true to show the camera, false to go back to your avatar." } }, required: ["show"] },
+  },
+  {
     name: "acknowledgeHomeEvent",
     description: "Record that the user has heard about a home event. With no arguments it applies to the event this call is about, or the newest unacknowledged one. This stops follow-up contact about it.",
     parameters: { type: "object", properties: {} },

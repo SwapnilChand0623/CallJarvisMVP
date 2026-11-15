@@ -14,7 +14,7 @@ export type MemoryData = {
   deviceActions: { userId: string; deviceId: string; on: boolean; status: string }[];
   attempts: Attempt[];
   homeModes: Record<string, HomeMode>;
-  callEvents: (CallEvent & { userId: string })[];
+  callEvents: (CallEvent & { userId: string; room?: string | null })[];
   callAttempts: (CallAttempt & { userId: string })[];
 };
 
@@ -114,6 +114,10 @@ export function memoryStore(data: MemoryData = demoData()): Store & { data: Memo
       if (!row) return null;
       row.acknowledgedAt = new Date().toISOString();
       return publicEvent(row);
+    },
+    async findCameraRoom(userId) {
+      const last = data.callEvents.filter((row) => row.userId === userId && ["camera_on", "camera_off", "call_ended"].includes(row.event)).at(-1);
+      return last?.event === "camera_on" ? last.room ?? null : null;
     },
     async findLiveAlertCall(userId) {
       const live = data.callAttempts.filter((row) => row.userId === userId && ["accepted", "answered"].includes(row.status)

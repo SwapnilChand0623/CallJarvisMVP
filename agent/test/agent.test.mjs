@@ -203,6 +203,12 @@ test('camera feed: pictures are fitted into a small frame, centred and upright',
   assert.equal(reused, wide);
   assert.deepEqual(pixel(reused, 5, 90), [0, 0, 0, 255]);
 
+  // On a call the user placed, the small picture is scaled up to the avatar's full frame.
+  const big = fitFrame(picture(320, 180, x => (x < 160 ? [255, 0, 0] : [0, 0, 255])), 320, 180, 0, new Uint8Array(WIDTH * HEIGHT * 4), WIDTH, HEIGHT);
+  const bigPixel = (x, y) => [...big.subarray((y * WIDTH + x) * 4, (y * WIDTH + x) * 4 + 4)];
+  assert.deepEqual([bigPixel(5, 5), bigPixel(315, 355), bigPixel(325, 5), bigPixel(635, 355)],
+    [[255, 0, 0, 255], [255, 0, 0, 255], [0, 0, 255, 255], [0, 0, 255, 255]]);
+
   const avatar = shrinkAvatar(renderFrame(0, 0, 1));
   assert.equal(avatar.length, 320 * 180 * 4);
   const full = renderFrame(0, 0, 1);
@@ -215,4 +221,8 @@ test('prompt: on a video alert call Jarvis knows the camera is shown and that it
   assert.match(buildInstructions(context, { feed: true }), /live home camera.*cannot see the video/);
   assert.doesNotMatch(buildInstructions(context, { feed: false }), /live home camera/);
   assert.doesNotMatch(buildInstructions(context), /live home camera/);
+  const asked = buildInstructions(context, { canShowCamera: true });
+  assert.match(asked, /call showCamera with show true/);
+  assert.match(asked, /cannot see the video yourself/);
+  assert.doesNotMatch(buildInstructions(context, { canShowCamera: false }), /showCamera/);
 });

@@ -89,6 +89,7 @@ export function createVoiceHandler(config: VoiceConfig) {
     const attemptId = id(fields.attemptId);
     const callId = id(fields.callId) ?? id(fields.room);
     const direction = attemptId ? "outbound" as const : "inbound" as const;
+    actor.call = { room: id(fields.room), callId, attemptId, direction };
     const log = (event: string, summary: string) => {
       if (!attemptId && !callId) return Promise.resolve();
       return config.deps!.store.insertCallEvent(actor.userId, { attemptId, callId, event, summary, direction })

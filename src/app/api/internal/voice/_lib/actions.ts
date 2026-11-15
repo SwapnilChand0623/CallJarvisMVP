@@ -196,6 +196,21 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     return { mode };
   },
 
+  async showCamera(deps, actor, args) {
+    if (typeof args.show !== "boolean") return new Failure("invalid_arguments", "show must be true or false.");
+    const call = actor.call;
+    if (!call?.room) return new Failure("not_on_a_call", "The camera can only be shown on a FaceTime Video call.");
+    // The camera page looks for this request, then joins the call and streams until it is withdrawn or the call ends.
+    await deps.store.insertCallEvent(actor.userId, {
+      attemptId: call.attemptId, callId: call.callId, direction: call.direction, room: call.room,
+      event: args.show ? "camera_on" : "camera_off",
+      summary: args.show ? "Asked to see the live home camera on the call." : "Stopped showing the camera.",
+    });
+    return args.show
+      ? { showing: true, note: "The camera appears within a few seconds if the home camera is switched on in the Simulator. If the user still sees your avatar, the camera is off. You cannot see the video, so do not describe it." }
+      : { showing: false };
+  },
+
   async acknowledgeHomeEvent(deps, actor) {
     // The event this call is about, or otherwise the newest one still waiting.
     let event = actor.focusEventId ? await deps.store.getHomeEvent(actor.userId, actor.focusEventId) : null;
