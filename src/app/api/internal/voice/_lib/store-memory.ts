@@ -1,5 +1,5 @@
 // In-memory fixture store for local development and tests, used when VOICE_STORE=memory. Data is lost on restart.
-import type { Attempt, Device, HomeEvent, HomeMode, Memory, Profile, Reminder, Store } from "./types";
+import type { Attempt, CallAttempt, CallEvent, Device, HomeEvent, HomeMode, Memory, Profile, Reminder, Store } from "./types";
 
 export const DEMO_USER_ID = "00000000-0000-4000-8000-000000000001";
 export const OTHER_USER_ID = "00000000-0000-4000-8000-000000000002";
@@ -14,6 +14,8 @@ export type MemoryData = {
   deviceActions: { userId: string; deviceId: string; on: boolean; status: string }[];
   attempts: Attempt[];
   homeModes: Record<string, HomeMode>;
+  callEvents: (CallEvent & { userId: string })[];
+  callAttempts: (CallAttempt & { userId: string })[];
 };
 
 export function demoData(now = new Date()): MemoryData {
@@ -44,6 +46,8 @@ export function demoData(now = new Date()): MemoryData {
     deviceActions: [],
     attempts: [{ id: "40000000-0000-4000-8000-000000000001", userId: DEMO_USER_ID, reminderId: "10000000-0000-4000-8000-000000000001", homeEventId: null }],
     homeModes: {},
+    callEvents: [],
+    callAttempts: [],
   };
 }
 
@@ -110,6 +114,14 @@ export function memoryStore(data: MemoryData = demoData()): Store & { data: Memo
       if (!row) return null;
       row.acknowledgedAt = new Date().toISOString();
       return publicEvent(row);
+    },
+    async insertCallEvent(userId, event) { data.callEvents.push({ userId, at: new Date().toISOString(), ...event }); },
+    async listCallEvents(userId, limit) {
+      return data.callEvents.filter((row) => row.userId === userId).slice(-limit).reverse()
+        .map((row): CallEvent => ({ at: row.at, attemptId: row.attemptId, callId: row.callId, event: row.event, summary: row.summary, direction: row.direction }));
+    },
+    async listCallAttempts(userId, limit) {
+      return copy(data.callAttempts.filter((row) => row.userId === userId).slice(-limit).reverse().map(({ userId: owner, ...attempt }) => (void owner, attempt)));
     },
     async setDeviceState(userId, deviceId, on) {
       const row = data.devices.find((item) => item.userId === userId && item.id === deviceId && item.permitted);

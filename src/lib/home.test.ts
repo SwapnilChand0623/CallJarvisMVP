@@ -152,3 +152,57 @@ test("sign-in: only a token Supabase accepts identifies a user", async () => {
   assert.equal(await signedInUser(request("not-a-jwt"), env, fetcher), null);
   assert.equal(await signedInUser(request("aaa.bbb.ccc"), {}, fetcher), null);
 });
+
+test("home: the stove on while Away is a critical alert, whichever happens second", async () => {
+  // Stove first, then Away.
+  const first = setup();
+  await first.home.state(FRESH_USER);
+  const stove = first.store.data.devices.find((device) => device.userId === FRESH_USER && device.kind === "stove")!;
+  await first.home.setDevice(FRESH_USER, stove.id, true);
+  assert.equal(first.store.data.homeEvents.filter((event) => event.userId === FRESH_USER).length, 0, "nothing to report at Home");
+  await first.home.setMode(FRESH_USER, "away");
+  const [alert] = (await first.home.state(FRESH_USER)).events;
+  assert.deepEqual([alert.type, alert.severity, alert.outreachEligible], ["stove_on", "critical", true]);
+  assert.match(alert.description, /stove appears to be on while the home is set to Away/);
+
+  // Away first, then the stove. Switching it off and on again does not stack a second alert.
+  const second = setup();
+  await second.home.setMode(FRESH_USER, "away");
+  assert.equal((await second.home.state(FRESH_USER)).events.length, 0);
+  const other = second.store.data.devices.find((device) => device.userId === FRESH_USER && device.kind === "stove")!;
+  await second.home.setDevice(FRESH_USER, other.id, true);
+  await second.home.setDevice(FRESH_USER, other.id, false);
+  await second.home.setDevice(FRESH_USER, other.id, true);
+  const critical = () => second.store.data.homeEvents.filter((event) => event.userId === FRESH_USER && event.severity === "critical");
+  assert.equal(critical().length, 1);
+
+  // Once it is acknowledged (here by Reset), the same thing happening again is a new alert straight away.
+  await second.home.reset(FRESH_USER);
+  await second.home.setDevice(FRESH_USER, other.id, true);
+  await second.home.setMode(FRESH_USER, "away");
+  assert.equal(critical().length, 2);
+
+  // The porch light is not an alert.
+  const light = second.store.data.devices.find((device) => device.userId === FRESH_USER && device.kind === "light")!;
+  await second.home.setDevice(FRESH_USER, light.id, true);
+  assert.equal(critical().length, 2);
+});
+
+test("home: a quiet stove entry made at Home does not hold back the alert when the home goes Away", async () => {
+  const { home, store } = setup();
+  await home.trigger(FRESH_USER, "red_bull_can");
+  await home.setMode(FRESH_USER, "away");
+  const events = store.data.homeEvents.filter((event) => event.userId === FRESH_USER);
+  assert.deepEqual(events.map((event) => event.severity).sort(), ["critical", "low"]);
+});
+
+test("jarvis: setting Away by voice with the stove on raises the same alert", async () => {
+  const { home, store } = setup();
+  await home.state(FRESH_USER);
+  const deps = { store, home: simulatedHomeService(store) };
+  const actor = { userId: FRESH_USER, timeZone: "America/Chicago", displayName: null, focusReminderId: null, focusEventId: null, origin: "voice" as const };
+  assert.ok((await runAction(deps, actor, "controlDevice", { device: "stove", on: true })).ok);
+  assert.equal(store.data.homeEvents.filter((event) => event.userId === FRESH_USER).length, 0);
+  assert.ok((await runAction(deps, actor, "setHomeMode", { mode: "away" })).ok);
+  assert.deepEqual(store.data.homeEvents.filter((event) => event.userId === FRESH_USER).map((event) => [event.type, event.severity]), [["stove_on", "critical"]]);
+});

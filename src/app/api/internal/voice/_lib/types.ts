@@ -30,6 +30,14 @@ export type HomeEvent = {
   outreachEligible: boolean;
   acknowledgedAt: string | null;
 };
+/** One line of a call's timeline. No audio or transcript is ever stored: only what happened and when. */
+export type CallEvent = { at: string; attemptId: string | null; callId: string | null; event: string; summary: string; direction: "inbound" | "outbound" };
+export type NewCallEvent = Omit<CallEvent, "at">;
+/** A FaceTime outreach attempt with what it was about, for the Logs page. */
+export type CallAttempt = {
+  id: string; stage: string; status: string; errorCode: string | null; simulated: boolean; createdAt: string; outcomeAt: string | null;
+  about: { kind: "reminder" | "home_event" | "check_in"; text: string; at: string | null; priority: string | null } | null;
+};
 export type NewHomeEvent = Pick<HomeEvent, "type" | "severity" | "description" | "outreachEligible">;
 export type Memory = { id: string; content: string; createdAt: string };
 export type Attempt = { id: string; userId: string; reminderId: string | null; homeEventId: string | null };
@@ -53,6 +61,11 @@ export type Store = {
   setHomeMode(userId: string, mode: HomeMode): Promise<HomeMode>;
   getHomeEvent(userId: string, id: string): Promise<HomeEvent | null>;
   insertHomeEvent(userId: string, event: NewHomeEvent): Promise<HomeEvent>;
+  /** Appends to the call log (communication_metadata). */
+  insertCallEvent(userId: string, event: NewCallEvent): Promise<void>;
+  listCallEvents(userId: string, limit: number): Promise<CallEvent[]>;
+  /** Recent FaceTime attempts with what each was about, newest first. */
+  listCallAttempts(userId: string, limit: number): Promise<CallAttempt[]>;
   /** Marks one event acknowledged. Returns null when it does not exist for this owner. */
   acknowledgeHomeEvent(userId: string, id: string): Promise<HomeEvent | null>;
   setDeviceState(userId: string, deviceId: string, on: boolean): Promise<Device | null>;

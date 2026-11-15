@@ -58,6 +58,7 @@ export function createCallWatcher({ store, livekit, facetime, intervalMs = 1000,
           await livekit.activateGreeting(room, providerId);
           greeted = true;
           await store.save(applyObserved({ ...current, greetingActivated: true }, "answered", null, providerId));
+          await store.logEvent?.(current, "answered", "You answered.");
           log(`call ${providerId} is ready; greeting started`);
           continue;
         }
@@ -67,6 +68,8 @@ export function createCallWatcher({ store, livekit, facetime, intervalMs = 1000,
         if (["completed", "unanswered", "failed"].includes(observed.kind)) {
           await store.save(applyObserved(current, observed.kind, observed.errorCode ?? null, providerId));
           await livekit.deleteRoom(room).catch(() => {});
+          await store.logEvent?.(current, "call_ended", observed.kind === "completed" ? "The call ended."
+            : observed.kind === "unanswered" ? "You did not answer." : "The call could not be completed.");
           log(`call ${providerId} ended: ${observed.kind}${observed.errorCode ? ` (${observed.errorCode})` : ""}`);
           return;
         }

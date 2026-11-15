@@ -4,6 +4,7 @@ import { propByEventType } from "../../../../../lib/home/props";
 import { ACTION_NAMES } from "./contract";
 import { resolveDue, toLocal, toSpoken } from "./time";
 import type { ActionError, ActionResult, Actor, Deps, HomeEvent, Priority, Reminder, ReminderPatch, ReminderStatus } from "./types";
+import { createHome } from "../../../../../lib/server/home/service";
 
 type Args = Record<string, unknown>;
 type Outcome = Record<string, unknown> | Failure;
@@ -75,6 +76,12 @@ async function change(deps: Deps, actor: Actor, now: Date, reminder: Reminder, p
 
 const closed = (reminder: Reminder) =>
   OPEN.includes(reminder.status) ? null : new Failure("reminder_closed", `That reminder is already ${reminder.status}, so nothing changed.`);
+
+/** The stove on while Away is a critical alert whichever way it came about. A failed check never fails the action. */
+async function stoveCheck(deps: Deps, userId: string) {
+  try { await createHome(deps.store, () => (deps.now?.() ?? new Date()).getTime()).checkStove(userId); }
+  catch (error) { console.error("[voice] stove check failed", error instanceof Error ? error.message : error); }
+}
 
 const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date) => Promise<Outcome>> = {
   async listReminders(deps, actor, args, now) {
@@ -178,12 +185,15 @@ const handlers: Record<string, (deps: Deps, actor: Actor, args: Args, now: Date)
     const device = matches[0];
     const outcome = await deps.home.setDevice({ userId: actor.userId, deviceId: device.id, on: args.on, origin: actor.origin });
     if (!outcome.ok) return new Failure("device_action_failed", `The ${device.kind} did not change: ${outcome.reason}. Tell the user it failed.`);
+    if (device.kind === "stove" && outcome.on) await stoveCheck(deps, actor.userId);
     return { device: { id: device.id, name: device.name, kind: device.kind, on: outcome.on }, simulated: outcome.simulated };
   },
 
   async setHomeMode(deps, actor, args) {
     if (args.mode !== "home" && args.mode !== "away") return new Failure("invalid_arguments", "mode must be home or away.");
-    return { mode: await deps.store.setHomeMode(actor.userId, args.mode) };
+    const mode = await deps.store.setHomeMode(actor.userId, args.mode);
+    if (mode === "away") await stoveCheck(deps, actor.userId);
+    return { mode };
   },
 
   async acknowledgeHomeEvent(deps, actor) {
