@@ -11,13 +11,17 @@ repository. The database stays on Supabase.
 
 `web` serves the dashboard, the voice actions, outreach and the Chert webhooks.
 It also follows each outbound call until it ends, so it must not sleep.
-`worker` is the Jarvis voice agent. `scheduler` finds due reminders every 20
-seconds and hands them to `web`.
+`worker` is the Jarvis voice agent. `scheduler` finds due reminders, check-ins
+and home alerts and hands them to `web`. It runs every
+`SCHEDULER_INTERVAL_SECONDS` (default 20; the live project uses 5).
+
+Railway does not redeploy these services when `main` changes. Redeploy each
+one from `main` after merging.
 
 ## 1. Create the project and the web service
 
 1. In Railway, create a project from the GitHub repository and pick the
-   `codex/live-calls` branch.
+   `main` branch.
 2. Name the service `web`. Leave the root directory as `/`. Railway detects
    Next.js and runs `npm run build` then `npm start`.
 3. Under Networking, generate a public domain. The rest of this guide calls it
@@ -54,7 +58,7 @@ Open `https://WEB_DOMAIN/api/health`. Every entry under `configured` should be
 | `AGENT_NAME` | `calljarvis` |
 | `VOICE_API_URL` | `https://WEB_DOMAIN` |
 | `VOICE_TOOL_TOKEN` | The same value as `web`. |
-| `JARVIS_VIDEO` | Optional. `1` publishes the avatar on inbound video calls. |
+| `JARVIS_VIDEO` | Optional. `1` publishes the avatar on inbound video calls, and the home camera when the caller asks for it. |
 
 The deploy log should end with the worker registered with LiveKit.
 
@@ -76,7 +80,7 @@ machine would send tool calls to `localhost`.
 | `OUTREACH_TOKEN` | The same value as `web`. |
 | `OUTREACH_ORIGIN` | `https://WEB_DOMAIN` |
 
-Its log prints `Scheduler running every 20 s` and then one line whenever the
+Its log prints `Scheduler running every N s` and then one line whenever the
 count of due reminders changes.
 
 Railway's shared variables let you define the values used by more than one
