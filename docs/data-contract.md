@@ -148,3 +148,21 @@ For future deployments, inspect existing tables/migrations, apply reviewed migra
 run advisors and verify with real Auth roles. Never run the demo seed against a
 hosted database containing real users. Migration files were created with the CLI
 and renamed to the versions recorded by the hosted migration service.
+
+## Verified phone onboarding
+
+Migration `20261115120000_verified_phone_onboarding.sql` adds authenticated RPC
+`complete_phone_onboarding(p_phone text, p_timezone text, p_consent boolean)`.
+The caller supplies an E.164 number and explicit consent, never a user ID. The
+function locks the `auth.uid()` Auth row and requires that number to match its
+confirmed phone. It atomically updates `profiles.destination`, `verified_at`,
+`timezone`, `outreach_enabled`, FaceTime opt-in, and
+`communication_rules.critical_channel`. Other delivery preferences are retained.
+Its JSON result contains the saved profile settings. Anonymous callers are
+refused; direct client updates to destination/verification remain forbidden.
+
+The UI uses Supabase's phone-change OTP flow on the existing email account, then
+refetches profile and rules before navigating home. Editable metadata is never
+verification evidence. Apply this migration and configure Supabase SMS phone
+confirmation before deploying that UI; no per-account admin provisioning is
+needed for the database handoff. Chert destination permissions remain separate.

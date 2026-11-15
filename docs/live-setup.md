@@ -36,14 +36,21 @@ Terminals 1 to 3 are enough to receive calls. Terminal 4 adds calls to you.
    | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Copy the three values from `agent/.env.local` |
 3. In `agent/.env.local`, set `VOICE_API_URL=http://localhost:3000` and the same
    `VOICE_TOOL_TOKEN` as the server.
-4. Start the server (`npm run dev`), open `http://localhost:3000/auth` and sign
-   up. That creates your account and profile in the database.
-5. Record your own phone and opt in to calls:
-   ```sh
-   npm run live:user -- --phone +15551234567 --timezone America/Chicago
-   ```
-   Use the phone you verified with Chert. Add the printed `VOICE_DEMO_USER_ID`
-   line to `.env.local` and restart the server.
+4. Apply `supabase/migrations/20261115120000_verified_phone_onboarding.sql`
+   before deploying the updated UI. Enable the Supabase Phone provider with
+   phone confirmation and an SMS provider; see `docs/UI_WORKFLOW.md`.
+5. Start the server (`npm run dev`), open `http://localhost:3000/auth` and
+   sign up. Complete phone setup: enter your mobile number, allow critical
+   reminder calls, and verify the texted code. The app atomically saves the
+   verified destination, time zone, FaceTime consent, and critical reminder
+   routing in the scheduler's database records. New users do not need the
+   `live:user` administration script.
+
+   The Chert line must separately allow your destination under its plan.
+   For the single-account inbound voice demo, copy your account UUID from
+   Supabase Auth into `VOICE_DEMO_USER_ID` in `.env.local` and restart the
+   server. Outbound reminders resolve their owner from the database and
+   do not use this global demo account setting.
 6. Start terminals 2 and 3, then check everything:
    ```sh
    npm run doctor
@@ -102,7 +109,7 @@ webhook.
 | --- | --- |
 | Jarvis says it cannot save anything | The worker could not reach the server. Check `VOICE_API_URL` and that both `VOICE_TOOL_TOKEN` values match, then run `npm run doctor`. |
 | `caller_not_verified` in the worker log | `VOICE_DEMO_USER_ID` is unset or matches no account. |
-| Scheduler prints `due 0` | No reminder is due, it is not critical, it is acknowledged, quiet hours apply, or the account is not opted in. Run `npm run live:user` again. |
+| Scheduler prints `due 0` | No reminder is due, it is not critical, it is acknowledged, quiet hours apply, or the account is not opted in. Finish phone verification and calling consent in the app. |
 | Attempt shows `simulated` | The Chert line is not ready to call out. `npm run doctor` prints the reason. |
 | Attempt returns to pending with `audio_not_ready` | The worker did not join the room within 8 seconds. Check terminal 2 and that the server and worker use the same LiveKit project and `AGENT_NAME`. |
 | Phone rings, then silence and the call drops | Readiness was not detected. The server log line `call … events:` shows the event names Chert reported. |
