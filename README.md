@@ -19,7 +19,7 @@ Everything below is deployed from `main` and has been used on a real phone unles
 | Feature | State |
 | --- | --- |
 | Call Jarvis on FaceTime Audio or Video and manage reminders by voice | Working |
-| Jarvis calls you about a **critical** reminder, with a retry after a missed call | Working; the retry after a declined call has not been re-tested since it was fixed |
+| Jarvis calls you about a **critical** reminder | Working |
 | "Call me back in N minutes" | Working |
 | Avatar on FaceTime Video calls (the dashboard's wooden horse mark; turns red for critical) | Working |
 | Home simulator at `/simulator`: Home/Away, stove, porch light, prop map, camera | Working |
