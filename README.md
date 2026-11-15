@@ -34,6 +34,8 @@ Everything below is deployed from `main` and has been used on a real phone unles
 **Read [the handoff](#handoff-for-the-next-ai) before changing anything.** The sections after it are the original
 hackathon plan, kept for reference; parts of it are out of date.
 
+See the [home-security product architecture](docs/architecture/DATA_FLOW.md): Call Jarvis bridges the home camera system and the homeowner through Chert and FaceTime.
+
 ## Handoff for the next AI
 
 ### How the system fits together
