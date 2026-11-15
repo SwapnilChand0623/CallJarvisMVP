@@ -1282,3 +1282,13 @@ input:-webkit-autofill:focus {
     left: 12px;
   }
 }
+
+/* Display type is deliberately limited to headings and the brand name. */
+h1, h2, h3, h4, h5, h6,
+.simple-main .page-heading h1,
+.panel-heading h2,
+.brand-wordmark {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 600;
+  letter-spacing: 0;
+}
