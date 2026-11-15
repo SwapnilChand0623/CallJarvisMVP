@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env.local agent.mjs start",
     "gemini:check": "node --env-file-if-exists=.env.local gemini-check.mjs",
-    "check": "node --check agent.mjs && node --check greet.mjs && node --check chert-rooms.mjs && node --check call-context.mjs && node --check voice-api.mjs && node --check tools.mjs && node --check prompt.mjs && node --check camera.mjs",
+    "check": "node --check agent.mjs && node --check greet.mjs && node --check chert-rooms.mjs && node --check call-context.mjs && node --check voice-api.mjs && node --check tools.mjs && node --check prompt.mjs && node --check camera.mjs && node --check avatar.mjs",
     "help": "node agent.mjs --help",
     "test": "node --test test/*.test.mjs",
     "test:e2e": "node --import ../src/app/api/internal/voice/_tests/resolve-ts.mjs test/e2e.mjs"
